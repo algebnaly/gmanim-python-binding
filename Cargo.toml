@@ -1,0 +1,15 @@
+[package]
+name = "gmanim-python-binding"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "gmanim"
+crate-type = ["cdylib"]
+
+[dependencies]
+gmanim_core = { package = "gmanim-core", path = "../gmanim" }
+pyo3 = { version = "0.28", features = ["extension-module"] }
+nalgebra = "0.35"
+tiny-skia = "0.12"
+indicatif = "0.17"
