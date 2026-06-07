@@ -6,6 +6,7 @@ use crate::animations::{PyMove, PyRotate, PyWait, PyUpdateFromFunc};
 struct RustUpdateFromFunc {
     callback: pyo3::Py<pyo3::PyAny>,
     total_frames: u32,
+    is_pure: bool,
 }
 
 impl gmanim_core::animation::Animation for RustUpdateFromFunc {
@@ -13,11 +14,15 @@ impl gmanim_core::animation::Animation for RustUpdateFromFunc {
         self.total_frames
     }
 
-    fn update(&mut self, t: gmanim_core::GMFloat, scene: &mut gmanim_core::Scene) {
+    fn is_pure(&self) -> bool {
+        self.is_pure
+    }
+
+    fn update(&mut self, alpha: gmanim_core::GMFloat, scene: &mut gmanim_core::Scene) {
         let _ = pyo3::Python::try_attach(|py| {
             let scene_ref = crate::scene::PySceneRef::borrow(scene);
             let py_scene_ref = pyo3::Bound::new(py, scene_ref).unwrap();
-            let args = (py_scene_ref, t as f32);
+            let args = (py_scene_ref, alpha as f32);
             if let Err(e) = self.callback.call1(py, args) {
                 e.print(py);
                 panic!("Python callback failed in UpdateFromFunc");
@@ -99,6 +104,7 @@ impl PyTimeline {
             let rust_update = RustUpdateFromFunc {
                 callback: update.callback.clone_ref(anim.py()),
                 total_frames: update.frames,
+                is_pure: update.is_pure,
             };
             self.inner.play(rust_update);
             Ok(())
@@ -124,7 +130,7 @@ impl PyTimeline {
         });
     }
 
-    #[pyo3(signature = (filename, fps=60, backend="ffmpeg", show_progress=true))]
+    #[pyo3(signature = (filename, fps=60, backend="vaapi", show_progress=true))]
     fn render(&mut self, filename: &str, fps: u32, backend: &str, show_progress: bool) -> PyResult<()> {
         let ow = self.inner.ctx.scene_config.output_width;
         let oh = self.inner.ctx.scene_config.output_height;

@@ -5,11 +5,15 @@ edition = "2021"
 
 [lib]
 name = "gmanim"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 gmanim_core = { package = "gmanim-core", path = "../gmanim" }
-pyo3 = { version = "0.28", features = ["extension-module"] }
+pyo3 = { version = "0.28" }
 nalgebra = "0.35"
 tiny-skia = "0.12"
 indicatif = "0.17"
+
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]

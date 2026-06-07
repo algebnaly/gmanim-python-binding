@@ -6,3 +6,5 @@
 /*.svg
 /*.log
 /temp
+**/__pycache__
+*.so

@@ -13,7 +13,7 @@ impl PyAnimation {
     }
 }
 
-#[pyclass(name = "Move", extends=PyAnimation, unsendable)]
+#[pyclass(name = "Move", extends=PyAnimation, skip_from_py_object, unsendable)]
 #[derive(Clone)]
 pub struct PyMove {
     pub target: PyMobject,
@@ -34,7 +34,7 @@ impl PyMove {
     }
 }
 
-#[pyclass(name = "Rotate", extends=PyAnimation, unsendable)]
+#[pyclass(name = "Rotate", extends=PyAnimation, skip_from_py_object, unsendable)]
 #[derive(Clone)]
 pub struct PyRotate {
     pub target: PyMobject,
@@ -57,7 +57,7 @@ impl PyRotate {
     }
 }
 
-#[pyclass(name = "Wait", extends=PyAnimation)]
+#[pyclass(name = "Wait", extends=PyAnimation, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyWait {
     pub frames: u32,
@@ -72,20 +72,26 @@ impl PyWait {
     }
 }
 
-#[pyclass(name = "UpdateFromFunc", extends=PyAnimation, unsendable)]
+#[pyclass(name = "UpdateFromFunc", extends=PyAnimation, skip_from_py_object, unsendable)]
 pub struct PyUpdateFromFunc {
     pub callback: pyo3::Py<pyo3::PyAny>,
     pub frames: u32,
+    pub is_pure: bool,
 }
 
 #[pymethods]
 impl PyUpdateFromFunc {
     #[new]
-    #[pyo3(signature = (callback, frames=60))]
-    fn new(callback: pyo3::Py<pyo3::PyAny>, frames: u32) -> (Self, PyAnimation) {
+    #[pyo3(signature = (callback, frames=60, is_pure=None))]
+    fn new(py: pyo3::Python<'_>, callback: pyo3::Py<pyo3::PyAny>, frames: u32, is_pure: Option<bool>) -> (Self, PyAnimation) {
+        let is_pure = is_pure.unwrap_or_else(|| {
+            let is_incremental = callback.bind(py).getattr("__incremental__").map(|x| x.is_truthy().unwrap_or(false)).unwrap_or(false);
+            !is_incremental
+        });
         (PyUpdateFromFunc {
             callback,
             frames,
+            is_pure,
         }, PyAnimation {})
     }
 }
