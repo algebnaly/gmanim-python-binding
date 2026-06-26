@@ -139,7 +139,7 @@ impl PyTimeline {
             framerate: fps,
             output_width: ow,
             output_height: oh,
-            color_order: gmanim_core::video_backend::ColorOrder::Rgba,
+            color_order: gmanim_core::video_backend::ColorOrder::Nv12,
         };
 
         let total_frames = self.inner.total_frames() as u64;
@@ -176,9 +176,13 @@ impl PyTimeline {
         };
 
         let mut frame_count: u64 = 0;
-        self.inner.render(|ctx| {
+        while self.inner.step_frame() {
             let mut buf = video_backend.acquire_buffer();
-            ctx.copy_image_into(buf.as_mut_slice());
+            if let Some(nv12_bytes) = self.inner.nv12_image_bytes() {
+                buf.as_mut_slice().copy_from_slice(nv12_bytes);
+            } else {
+                buf.as_mut_slice().fill(0);
+            }
             video_backend.submit_frame(buf);
             
             if let Some(ref p) = pb {
@@ -187,7 +191,7 @@ impl PyTimeline {
                     p.inc(60);
                 }
             }
-        });
+        }
 
         if let Some(ref p) = pb {
             let remainder = frame_count % 60;

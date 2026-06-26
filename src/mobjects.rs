@@ -31,6 +31,7 @@ impl PyLine {
             p1: nalgebra::Point3::new(p1_val.0, p1_val.1, p1_val.2),
             draw_config,
             model_matrix: nalgebra::Matrix4::identity(),
+            mesh: Default::default(),
         });
         (PyLine {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_line))))) })
     }
@@ -64,6 +65,7 @@ impl PyRectangle {
             color: Default::default(),
             draw_config,
             model_matrix: nalgebra::Matrix4::identity(),
+            mesh: Default::default(),
         });
         (PyRectangle {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_rect))))) })
     }
@@ -87,7 +89,8 @@ impl PyPolyLine {
         let core_poly = Box::new(PolyLine {
             points: points.iter().map(|p| nalgebra::Point3::new(p.0, p.1, p.2)).collect(),
             draw_config,
-                    model_matrix: nalgebra::Matrix4::identity(),
+            model_matrix: nalgebra::Matrix4::identity(),
+            mesh: Default::default(),
         });
         (PyPolyLine {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_poly))))) })
     }
