@@ -8,9 +8,10 @@ use gmanim_core::Color;
 use crate::utils::build_draw_config;
 use crate::scene::PyMobject;
 
-#[pyclass(name = "Line", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyLine {}
+#[pyclass(name = "Line", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyLine {
+    pub concrete: Rc<RefCell<SimpleLine>>,
+}
 
 #[pymethods]
 impl PyLine {
@@ -26,20 +27,22 @@ impl PyLine {
         let p0_val = p0.unwrap_or((-1.0, 0.0, 0.0));
         let p1_val = p1.unwrap_or((1.0, 0.0, 0.0));
         let draw_config = build_draw_config(stroke_width, fill, color);
-        let core_line = Box::new(SimpleLine {
+        let core_line = SimpleLine {
+            base: gmanim_core::mobjects::MobjectBase::new("Line"),
             p0: nalgebra::Point3::new(p0_val.0, p0_val.1, p0_val.2),
             p1: nalgebra::Point3::new(p1_val.0, p1_val.1, p1_val.2),
             draw_config,
-            model_matrix: nalgebra::Matrix4::identity(),
             mesh: Default::default(),
-        });
-        (PyLine {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_line))))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_line));
+        (PyLine { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Rectangle", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyRectangle {}
+#[pyclass(name = "Rectangle", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyRectangle {
+    pub concrete: Rc<RefCell<Rectangle>>,
+}
 
 #[pymethods]
 impl PyRectangle {
@@ -57,23 +60,25 @@ impl PyRectangle {
         let c = center.unwrap_or((0.0, 0.0, 0.0));
         let hw = width / 2.0;
         let hh = height / 2.0;
-        let core_rect = Box::new(Rectangle {
+        let core_rect = Rectangle {
+            base: gmanim_core::mobjects::MobjectBase::new("Rectangle"),
             p0: nalgebra::Point3::new(c.0 - hw, c.1 - hh, c.2),
             p1: nalgebra::Point3::new(c.0 + hw, c.1 - hh, c.2),
             p2: nalgebra::Point3::new(c.0 + hw, c.1 + hh, c.2),
             p3: nalgebra::Point3::new(c.0 - hw, c.1 + hh, c.2),
             color: Default::default(),
             draw_config,
-            model_matrix: nalgebra::Matrix4::identity(),
             mesh: Default::default(),
-        });
-        (PyRectangle {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_rect))))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_rect));
+        (PyRectangle { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "PolyLine", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyPolyLine {}
+#[pyclass(name = "PolyLine", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyPolyLine {
+    pub concrete: Rc<RefCell<PolyLine>>,
+}
 
 #[pymethods]
 impl PyPolyLine {
@@ -86,19 +91,21 @@ impl PyPolyLine {
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
         let draw_config = build_draw_config(stroke_width, fill, color);
-        let core_poly = Box::new(PolyLine {
+        let core_poly = PolyLine {
+            base: gmanim_core::mobjects::MobjectBase::new("PolyLine"),
             points: points.iter().map(|p| nalgebra::Point3::new(p.0, p.1, p.2)).collect(),
             draw_config,
-            model_matrix: nalgebra::Matrix4::identity(),
             mesh: Default::default(),
-        });
-        (PyPolyLine {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_poly))))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_poly));
+        (PyPolyLine { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Arc", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyArc {}
+#[pyclass(name = "Arc", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyArc {
+    pub concrete: Rc<RefCell<Arc>>,
+}
 
 #[pymethods]
 impl PyArc {
@@ -122,13 +129,15 @@ impl PyArc {
             radius,
         );
         arc.draw_config = draw_config;
-        (PyArc {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(Box::new(arc)))))) })
+        let concrete = Rc::new(RefCell::new(arc));
+        (PyArc { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Dot", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyDot {}
+#[pyclass(name = "Dot", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyDot {
+    pub concrete: Rc<RefCell<Dot>>,
+}
 
 #[pymethods]
 impl PyDot {
@@ -143,19 +152,21 @@ impl PyDot {
     ) -> (Self, PyMobject) {
         let draw_config = build_draw_config(stroke_width, fill, color);
         let c = color.map(|c| Color::new(c.0, c.1, c.2, c.3)).unwrap_or_default();
-        let core_dot = Box::new(Dot::new(
+        let core_dot = Dot::new(
             nalgebra::Point3::new(position.0, position.1, position.2),
             radius,
             c,
             draw_config,
-        ));
-        (PyDot {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_dot))))) })
+        );
+        let concrete = Rc::new(RefCell::new(core_dot));
+        (PyDot { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Text", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyText {}
+#[pyclass(name = "Text", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyText {
+    pub concrete: Rc<RefCell<Text>>,
+}
 
 #[pymethods]
 impl PyText {
@@ -170,19 +181,21 @@ impl PyText {
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
         let draw_config = build_draw_config(stroke_width, fill, color);
-        let core_text = Box::new(Text::new(
+        let core_text = Text::new(
             text,
             nalgebra::Point3::new(position.0, position.1, position.2),
             font_size,
             draw_config,
-        ));
-        (PyText {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_text))))) })
+        );
+        let concrete = Rc::new(RefCell::new(core_text));
+        (PyText { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Sphere3D", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PySphere3D {}
+#[pyclass(name = "Sphere3D", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PySphere3D {
+    pub concrete: Rc<RefCell<Sphere3D>>,
+}
 
 #[pymethods]
 impl PySphere3D {
@@ -195,21 +208,26 @@ impl PySphere3D {
     ) -> (Self, PyMobject) {
         let c = color.map(|c| Color::new(c.0, c.1, c.2, c.3)).unwrap_or_default();
         let ct = center.unwrap_or((0.0, 0.0, 0.0));
-        let core_obj = Box::new(Sphere3D {
-            center: nalgebra::Point3::new(0.0, 0.0, 0.0),
+        let core_obj = Sphere3D {
+            base: gmanim_core::mobjects::MobjectBase::new("Sphere3D"),
             radius,
             color: c,
-                    model_matrix: nalgebra::Matrix4::identity(),
-        });
-        let mut node = gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_obj));
-        node.local_transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(ct.0, ct.1, ct.2));
-        (PySphere3D {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(node))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_obj));
+        {
+            use gmanim_core::mobjects::Transform;
+            concrete.borrow_mut().apply_transform(
+                nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(ct.0, ct.1, ct.2))
+            );
+        }
+        (PySphere3D { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "LineSegment3D", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyLineSegment3D {}
+#[pyclass(name = "LineSegment3D", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyLineSegment3D {
+    pub concrete: Rc<RefCell<LineSegment3D>>,
+}
 
 #[pymethods]
 impl PyLineSegment3D {
@@ -224,20 +242,22 @@ impl PyLineSegment3D {
         let c = color.map(|c| Color::new(c.0, c.1, c.2, c.3)).unwrap_or_default();
         let pt_a = a.unwrap_or((-1.0, 0.0, 0.0));
         let pt_b = b.unwrap_or((1.0, 0.0, 0.0));
-        let core_obj = Box::new(LineSegment3D {
+        let core_obj = LineSegment3D {
+            base: gmanim_core::mobjects::MobjectBase::new("LineSegment3D"),
             a: nalgebra::Point3::new(pt_a.0, pt_a.1, pt_a.2),
             b: nalgebra::Point3::new(pt_b.0, pt_b.1, pt_b.2),
             radius,
             color: c,
-                    model_matrix: nalgebra::Matrix4::identity(),
-        });
-        (PyLineSegment3D {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_obj))))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_obj));
+        (PyLineSegment3D { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Arrow3D", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyArrow3D {}
+#[pyclass(name = "Arrow3D", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyArrow3D {
+    pub concrete: Rc<RefCell<Arrow3D>>,
+}
 
 #[pymethods]
 impl PyArrow3D {
@@ -254,22 +274,24 @@ impl PyArrow3D {
         let c = color.map(|c| Color::new(c.0, c.1, c.2, c.3)).unwrap_or_default();
         let pt_a = start.unwrap_or((-1.0, 0.0, 0.0));
         let pt_b = end.unwrap_or((1.0, 0.0, 0.0));
-        let core_obj = Box::new(Arrow3D {
+        let core_obj = Arrow3D {
+            base: gmanim_core::mobjects::MobjectBase::new("Arrow3D"),
             start: nalgebra::Point3::new(pt_a.0, pt_a.1, pt_a.2),
             end: nalgebra::Point3::new(pt_b.0, pt_b.1, pt_b.2),
             shaft_radius,
             head_radius,
             head_length,
             color: c,
-                    model_matrix: nalgebra::Matrix4::identity(),
-        });
-        (PyArrow3D {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_obj))))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_obj));
+        (PyArrow3D { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Box3DSdf", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyBox3DSdf {}
+#[pyclass(name = "Box3DSdf", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyBox3DSdf {
+    pub concrete: Rc<RefCell<gmanim_core::mobjects::object_3d::Box3DSdf>>,
+}
 
 #[pymethods]
 impl PyBox3DSdf {
@@ -283,24 +305,29 @@ impl PyBox3DSdf {
         let c = color.map(|c| Color::new(c.0, c.1, c.2, c.3)).unwrap_or_default();
         let ct = center.unwrap_or((0.0, 0.0, 0.0));
         let sz = size.unwrap_or((1.0, 1.0, 1.0));
-        let core_obj = Box::new(gmanim_core::mobjects::object_3d::Box3DSdf {
-            center: nalgebra::Point3::new(0.0, 0.0, 0.0),
+        let core_obj = gmanim_core::mobjects::object_3d::Box3DSdf {
+            base: gmanim_core::mobjects::MobjectBase::new("Box3DSdf"),
             size: nalgebra::Vector3::new(sz.0, sz.1, sz.2),
             x_axis: nalgebra::Vector3::new(1.0, 0.0, 0.0),
             y_axis: nalgebra::Vector3::new(0.0, 1.0, 0.0),
             z_axis: nalgebra::Vector3::new(0.0, 0.0, 1.0),
             color: c,
-                    model_matrix: nalgebra::Matrix4::identity(),
-        });
-        let mut node = gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_obj));
-        node.local_transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(ct.0, ct.1, ct.2));
-        (PyBox3DSdf {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(node))) })
+        };
+        let concrete = Rc::new(RefCell::new(core_obj));
+        {
+            use gmanim_core::mobjects::Transform;
+            concrete.borrow_mut().apply_transform(
+                nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(ct.0, ct.1, ct.2))
+            );
+        }
+        (PyBox3DSdf { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
-#[pyclass(name = "Box3D", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyBox3D {}
+#[pyclass(name = "Box3D", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyBox3D {
+    pub concrete: Rc<RefCell<gmanim_core::mobjects::mesh_3d::TriangleMesh3D>>,
+}
 
 #[pymethods]
 impl PyBox3D {
@@ -314,21 +341,27 @@ impl PyBox3D {
         let c = color.map(|c| Color::new(c.0, c.1, c.2, c.3)).unwrap_or_default();
         let ct = center.unwrap_or((0.0, 0.0, 0.0));
         let sz = size.unwrap_or((1.0, 1.0, 1.0));
-        let core_obj = Box::new(gmanim_core::mobjects::mesh_3d::TriangleMesh3D::box_mesh(
+        let mut core_obj = gmanim_core::mobjects::mesh_3d::TriangleMesh3D::box_mesh(
             nalgebra::Point3::new(0.0, 0.0, 0.0),
             nalgebra::Vector3::new(sz.0, sz.1, sz.2),
             c,
-        ));
-        let mut node = gmanim_core::mobjects::scene_node::SceneNode::new(Some(core_obj));
-        node.local_transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(ct.0, ct.1, ct.2));
-        (PyBox3D {}, PyMobject { inner: Rc::new(RefCell::new(Box::new(node))) })
+        );
+        {
+            use gmanim_core::mobjects::Transform;
+            core_obj.apply_transform(
+                nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(ct.0, ct.1, ct.2))
+            );
+        }
+        let concrete = Rc::new(RefCell::new(core_obj));
+        (PyBox3D { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }
 
 
-#[pyclass(name = "TriangleMesh3D", extends=PyMobject, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyTriangleMesh3D;
+#[pyclass(name = "TriangleMesh3D", extends=PyMobject, skip_from_py_object, unsendable)]
+pub struct PyTriangleMesh3D {
+    pub concrete: Rc<RefCell<gmanim_core::mobjects::mesh_3d::TriangleMesh3D>>,
+}
 
 #[pymethods]
 impl PyTriangleMesh3D {
@@ -361,13 +394,10 @@ impl PyTriangleMesh3D {
                 mat[2][0], mat[2][1], mat[2][2], mat[2][3],
                 mat[3][0], mat[3][1], mat[3][2], mat[3][3],
             ]);
-            gmanim_core::mobjects::Transform::set_model_matrix(&mut mesh, nalgebra_mat);
+            use gmanim_core::mobjects::Mobject;
+            mesh.set_model_matrix(nalgebra_mat);
         }
-        (
-            PyTriangleMesh3D,
-            PyMobject {
-                inner: std::rc::Rc::new(std::cell::RefCell::new(Box::new(gmanim_core::mobjects::scene_node::SceneNode::new(Some(Box::new(mesh)))))),
-            },
-        )
+        let concrete = Rc::new(RefCell::new(mesh));
+        (PyTriangleMesh3D { concrete: concrete.clone() }, PyMobject { inner: concrete })
     }
 }

@@ -1,5 +1,4 @@
 // src/scene.rs
-use std::cell::RefCell;
 use std::rc::Rc;
 use pyo3::prelude::*;
 
@@ -39,7 +38,7 @@ impl gmanim_core::animation::Animation for RustUpdateFromFunc {
 #[pyclass(name = "Mobject", unsendable, subclass, from_py_object)]
 #[derive(Clone)]
 pub struct PyMobject {
-    pub inner: Rc<RefCell<Box<dyn gmanim_core::mobjects::Mobject>>>,
+    pub inner: gmanim_core::mobjects::MobjectRef,
 }
 
 #[pymethods]
@@ -64,13 +63,13 @@ impl PyMobject {
     }
     
     #[getter]
-    fn get_name(&self) -> PyResult<Option<String>> {
-        Ok(self.inner.borrow().get_name())
+    fn get_name(&self) -> PyResult<String> {
+        Ok(self.inner.borrow().get_name().to_string())
     }
 
     #[setter]
     fn set_name(&mut self, name: String) -> PyResult<()> {
-        self.inner.borrow_mut().set_name(name);
+        self.inner.borrow_mut().set_name(&name);
         Ok(())
     }
 
