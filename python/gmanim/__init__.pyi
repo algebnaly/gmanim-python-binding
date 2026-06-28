@@ -283,9 +283,11 @@ class Axes3DRound(Group):
         radius: float = 0.05,
         head_radius: float = 0.15,
         head_length: float = 0.5,
-        x_color: Optional[Tuple[int, int, int, int]] = (255, 0, 0, 255),
-        y_color: Optional[Tuple[int, int, int, int]] = (0, 255, 0, 255),
-        z_color: Optional[Tuple[int, int, int, int]] = (0, 0, 255, 255),
+        backward_length: float = 1.0,
+        axis_color: Optional[Tuple[int, int, int, int]] = (150, 150, 150, 255),
+        x_color: Optional[Tuple[int, int, int, int]] = (235, 83, 83, 255),
+        y_color: Optional[Tuple[int, int, int, int]] = (75, 181, 67, 255),
+        z_color: Optional[Tuple[int, int, int, int]] = (54, 162, 235, 255),
     ) -> None: ...
 
 class Axes3D(Group):
@@ -294,9 +296,11 @@ class Axes3D(Group):
         length: float = 3.0,
         head_size: float = 0.2,
         stroke_width: float = 2.0,
-        x_color: Optional[Tuple[int, int, int, int]] = (255, 0, 0, 255),
-        y_color: Optional[Tuple[int, int, int, int]] = (0, 255, 0, 255),
-        z_color: Optional[Tuple[int, int, int, int]] = (0, 0, 255, 255),
+        backward_length: float = 1.0,
+        axis_color: Optional[Tuple[int, int, int, int]] = (150, 150, 150, 255),
+        x_color: Optional[Tuple[int, int, int, int]] = (235, 83, 83, 255),
+        y_color: Optional[Tuple[int, int, int, int]] = (75, 181, 67, 255),
+        z_color: Optional[Tuple[int, int, int, int]] = (54, 162, 235, 255),
     ) -> None: ...
 
 class Animation: ...

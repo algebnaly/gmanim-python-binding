@@ -13,15 +13,20 @@ class Axes3DRound(_gmanim.Group):
         radius=0.05,
         head_radius=0.15,
         head_length=0.5,
-        x_color=(255, 0, 0, 255),
-        y_color=(0, 255, 0, 255),
-        z_color=(0, 0, 255, 255),
+        backward_length=1.0,  # Negative extension
+        axis_color=(150, 150, 150, 255),  # Gray shaft
+        x_color=(235, 83, 83, 255),  # Softer Red (Coral)
+        y_color=(75, 181, 67, 255),  # Softer Green
+        z_color=(54, 162, 235, 255),  # Softer Blue
     ):
         super().__init__()
 
         # X-axis
         self.x_cylinder = _gmanim.Cylinder3D(
-            start=(0.0, 0.0, 0.0), end=(length, 0.0, 0.0), radius=radius, color=x_color
+            start=(-backward_length, 0.0, 0.0),
+            end=(length, 0.0, 0.0),
+            radius=radius,
+            color=axis_color,
         )
         self.x_cone = _gmanim.Cone3D(
             base_center=(length, 0.0, 0.0),
@@ -32,7 +37,10 @@ class Axes3DRound(_gmanim.Group):
 
         # Y-axis
         self.y_cylinder = _gmanim.Cylinder3D(
-            start=(0.0, 0.0, 0.0), end=(0.0, length, 0.0), radius=radius, color=y_color
+            start=(0.0, -backward_length, 0.0),
+            end=(0.0, length, 0.0),
+            radius=radius,
+            color=axis_color,
         )
         self.y_cone = _gmanim.Cone3D(
             base_center=(0.0, length, 0.0),
@@ -43,7 +51,10 @@ class Axes3DRound(_gmanim.Group):
 
         # Z-axis
         self.z_cylinder = _gmanim.Cylinder3D(
-            start=(0.0, 0.0, 0.0), end=(0.0, 0.0, length), radius=radius, color=z_color
+            start=(0.0, 0.0, -backward_length),
+            end=(0.0, 0.0, length),
+            radius=radius,
+            color=axis_color,
         )
         self.z_cone = _gmanim.Cone3D(
             base_center=(0.0, 0.0, length),
@@ -70,9 +81,11 @@ class Axes3D(_gmanim.Group):
         length=3.0,
         head_size=0.15,
         stroke_width=0.05,
-        x_color=(255, 0, 0, 255),
-        y_color=(0, 255, 0, 255),
-        z_color=(0, 0, 255, 255),
+        backward_length=1.0,  # Negative extension
+        axis_color=(150, 150, 150, 255),  # Gray shaft
+        x_color=(235, 83, 83, 255),  # Softer Red (Coral)
+        y_color=(75, 181, 67, 255),  # Softer Green
+        z_color=(54, 162, 235, 255),  # Softer Blue
     ):
         super().__init__()
 
@@ -81,10 +94,10 @@ class Axes3D(_gmanim.Group):
         def make_arrow(color):
             group = _gmanim.Group()
             line = Line2DMesh3D(
-                p0=(0.0, 0.0, 0.0),
+                p0=(-backward_length, 0.0, 0.0),
                 p1=(length - head_size, 0.0, 0.0),
                 stroke_width=stroke_width,
-                color=color,
+                color=axis_color,
             )
 
             # The tip is at `length`, and the two corners are at `length - head_size`
