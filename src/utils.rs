@@ -1,6 +1,6 @@
 // src/utils.rs
-use gmanim_core::mobjects::DrawConfig;
 use gmanim_core::Color;
+use gmanim_core::mobjects::DrawConfig;
 
 pub fn build_draw_config(
     stroke_width: Option<f32>,

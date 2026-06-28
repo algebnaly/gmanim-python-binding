@@ -1,13 +1,17 @@
-pub mod utils;
-pub mod scene;
-pub mod mobjects;
 pub mod animations;
+pub mod ipc;
+pub mod mobjects;
+pub mod scene;
+pub mod utils;
 
 use pyo3::prelude::*;
 
-use scene::{PyScene, PySceneRef, PyMobject};
-use mobjects::{PyLine, PyRectangle, PyPolyLine, PyArc, PyDot, PyText, PySphere3D, PyLineSegment3D, PyArrow3D, PyBox3D, PyBox3DSdf, PyMesh2DIn3D};
-use animations::{PyAnimation, PyMove, PyRotate, PyWait, PyUpdateFromFunc};
+use animations::{PyAnimation, PyMove, PyRotate, PyUpdateFromFunc, PyWait};
+use mobjects::{
+    PyArc, PyArrow3D, PyBox3D, PyBox3DSdf, PyDot, PyLine, PyLineSegment3D, PyMesh2DIn3D,
+    PyPolyLine, PyRectangle, PySphere3D, PyText,
+};
+use scene::{PyMobject, PyScene, PySceneRef};
 
 #[pyclass(eq, eq_int, from_py_object)]
 #[derive(PartialEq, Clone, Debug)]
@@ -35,7 +39,7 @@ def incremental(func):
     m.setattr("registry", temp_module.getattr("registry")?)?;
     m.setattr("scene", temp_module.getattr("scene")?)?;
     m.setattr("incremental", temp_module.getattr("incremental")?)?;
-    
+
     if let Ok(all) = m.getattr("__all__") {
         if let Ok(all_list) = all.cast::<pyo3::types::PyList>() {
             let _ = all_list.append("registry");

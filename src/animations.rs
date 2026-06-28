@@ -1,6 +1,6 @@
 // src/animations.rs
-use pyo3::prelude::*;
 use crate::scene::PyMobject;
+use pyo3::prelude::*;
 
 #[pyclass(name = "Animation", subclass)]
 pub struct PyAnimation {}
@@ -26,11 +26,14 @@ impl PyMove {
     #[new]
     #[pyo3(signature = (target, displacement, frames=60))]
     fn new(target: PyMobject, displacement: (f32, f32, f32), frames: u32) -> (Self, PyAnimation) {
-        (PyMove {
-            target,
-            displacement,
-            frames,
-        }, PyAnimation {})
+        (
+            PyMove {
+                target,
+                displacement,
+                frames,
+            },
+            PyAnimation {},
+        )
     }
 }
 
@@ -47,13 +50,21 @@ pub struct PyRotate {
 impl PyRotate {
     #[new]
     #[pyo3(signature = (target, axis, center, frames=60))]
-    fn new(target: PyMobject, axis: (f32, f32, f32), center: (f32, f32, f32), frames: u32) -> (Self, PyAnimation) {
-        (PyRotate {
-            target,
-            axis,
-            center,
-            frames,
-        }, PyAnimation {})
+    fn new(
+        target: PyMobject,
+        axis: (f32, f32, f32),
+        center: (f32, f32, f32),
+        frames: u32,
+    ) -> (Self, PyAnimation) {
+        (
+            PyRotate {
+                target,
+                axis,
+                center,
+                frames,
+            },
+            PyAnimation {},
+        )
     }
 }
 
@@ -83,15 +94,27 @@ pub struct PyUpdateFromFunc {
 impl PyUpdateFromFunc {
     #[new]
     #[pyo3(signature = (callback, frames=60, is_pure=None))]
-    fn new(py: pyo3::Python<'_>, callback: pyo3::Py<pyo3::PyAny>, frames: u32, is_pure: Option<bool>) -> (Self, PyAnimation) {
+    fn new(
+        py: pyo3::Python<'_>,
+        callback: pyo3::Py<pyo3::PyAny>,
+        frames: u32,
+        is_pure: Option<bool>,
+    ) -> (Self, PyAnimation) {
         let is_pure = is_pure.unwrap_or_else(|| {
-            let is_incremental = callback.bind(py).getattr("__incremental__").map(|x| x.is_truthy().unwrap_or(false)).unwrap_or(false);
+            let is_incremental = callback
+                .bind(py)
+                .getattr("__incremental__")
+                .map(|x| x.is_truthy().unwrap_or(false))
+                .unwrap_or(false);
             !is_incremental
         });
-        (PyUpdateFromFunc {
-            callback,
-            frames,
-            is_pure,
-        }, PyAnimation {})
+        (
+            PyUpdateFromFunc {
+                callback,
+                frames,
+                is_pure,
+            },
+            PyAnimation {},
+        )
     }
 }

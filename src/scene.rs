@@ -1,8 +1,8 @@
 // src/scene.rs
-use std::rc::Rc;
 use pyo3::prelude::*;
+use std::rc::Rc;
 
-use crate::animations::{PyMove, PyRotate, PyWait, PyUpdateFromFunc};
+use crate::animations::{PyMove, PyRotate, PyUpdateFromFunc, PyWait};
 
 struct RustUpdateFromFunc {
     callback: pyo3::Py<pyo3::PyAny>,
@@ -31,9 +31,6 @@ impl gmanim_core::animation::Animation for RustUpdateFromFunc {
         });
     }
 }
-
-
-
 
 #[pyclass(name = "Mobject", unsendable, subclass, from_py_object)]
 #[derive(Clone)]
@@ -79,13 +76,15 @@ impl PyMobject {
         Ok((pos.x, pos.y, pos.z))
     }
     pub fn add(&mut self, child: &pyo3::Bound<'_, PyMobject>) {
-        self.inner.borrow_mut().add_child(child.borrow().inner.clone());
+        self.inner
+            .borrow_mut()
+            .add_child(child.borrow().inner.clone());
     }
 
     pub fn remove(&mut self, child: &pyo3::Bound<'_, PyMobject>) {
         self.inner.borrow_mut().remove_child(&child.borrow().inner);
     }
-    
+
     #[getter]
     fn get_name(&self) -> PyResult<String> {
         Ok(self.inner.borrow().get_name().to_string())
@@ -96,7 +95,6 @@ impl PyMobject {
         self.inner.borrow_mut().set_name(&name);
         Ok(())
     }
-
 }
 
 #[pyclass(name = "Scene", unsendable)]
@@ -127,9 +125,7 @@ impl PyScene {
             scale_factor: sf,
         };
 
-        let ctx = gmanim_core::Context {
-            scene_config,
-        };
+        let ctx = gmanim_core::Context { scene_config };
 
         let scene_inner = gmanim_core::Scene::new();
 
@@ -139,9 +135,10 @@ impl PyScene {
     }
 
     fn add(&mut self, mobj: PyMobject) -> PyResult<PyMobject> {
-        let timeline = self.inner.as_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Scene internal error")
-        })?;
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Scene internal error"))?;
         let scene = &mut timeline.scene;
 
         scene.add_ref(mobj.inner.clone());
@@ -149,9 +146,10 @@ impl PyScene {
     }
 
     fn remove(&mut self, arg: &Bound<'_, PyAny>) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Scene internal error")
-        })?;
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Scene internal error"))?;
         let scene = &mut timeline.scene;
 
         if let Ok(index) = arg.extract::<usize>() {
@@ -159,17 +157,27 @@ impl PyScene {
                 scene.mobjects.remove(index);
                 Ok(())
             } else {
-                Err(pyo3::exceptions::PyIndexError::new_err("Index out of range"))
+                Err(pyo3::exceptions::PyIndexError::new_err(
+                    "Index out of range",
+                ))
             }
         } else if let Ok(mobj) = arg.extract::<PyMobject>() {
-            if let Some(pos) = scene.mobjects.iter().position(|m| Rc::ptr_eq(m, &mobj.inner)) {
+            if let Some(pos) = scene
+                .mobjects
+                .iter()
+                .position(|m| Rc::ptr_eq(m, &mobj.inner))
+            {
                 scene.mobjects.remove(pos);
                 Ok(())
             } else {
-                Err(pyo3::exceptions::PyValueError::new_err("Mobject not found in Scene"))
+                Err(pyo3::exceptions::PyValueError::new_err(
+                    "Mobject not found in Scene",
+                ))
             }
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Expected an index (int) or a Mobject"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Expected an index (int) or a Mobject",
+            ))
         }
     }
     #[pyo3(signature = (position=None, target=None, direction=None, up=None))]
@@ -180,14 +188,15 @@ impl PyScene {
         direction: Option<(f32, f32, f32)>,
         up: Option<(f32, f32, f32)>,
     ) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Scene internal error")
-        })?;
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Scene internal error"))?;
         let scene = &mut timeline.scene;
         if let Some(pos) = position {
             scene.camera.position = nalgebra::Point3::new(pos.0, pos.1, pos.2);
         }
-        
+
         if let Some(t) = target {
             let target_point = nalgebra::Point3::new(t.0, t.1, t.2);
             let mut dir = target_point - scene.camera.position;
@@ -201,7 +210,7 @@ impl PyScene {
                 scene.camera.set_look_at(dir);
             }
         }
-        
+
         if let Some(u) = up {
             let up_dir = nalgebra::Vector3::new(u.0, u.1, u.2);
             if up_dir.norm_squared() >= 1e-6 {
@@ -212,20 +221,40 @@ impl PyScene {
     }
 
     #[pyo3(signature = (height=9.0, width=None, near=0.1, far=50.0))]
-    fn set_orthographic_camera(&mut self, height: f32, width: Option<f32>, near: f32, far: f32) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
+    fn set_orthographic_camera(
+        &mut self,
+        height: f32,
+        width: Option<f32>,
+        near: f32,
+        far: f32,
+    ) -> PyResult<()> {
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
         let scene = &mut timeline.scene;
         if scene.camera.position == nalgebra::Point3::new(0.0, 0.0, 0.0) {
             scene.camera.position = nalgebra::Point3::new(0.0, 0.0, 10.0);
         }
         let w = width.unwrap_or(height * (16.0 / 9.0));
-        scene.camera.set_orthographic(-w / 2.0, w / 2.0, -height / 2.0, height / 2.0, near, far);
+        scene
+            .camera
+            .set_orthographic(-w / 2.0, w / 2.0, -height / 2.0, height / 2.0, near, far);
         Ok(())
     }
 
     #[pyo3(signature = (fovy=1.5707964, aspect=None, near=0.1, far=50.0))]
-    fn set_perspective_camera(&mut self, fovy: f32, aspect: Option<f32>, near: f32, far: f32) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
+    fn set_perspective_camera(
+        &mut self,
+        fovy: f32,
+        aspect: Option<f32>,
+        near: f32,
+        far: f32,
+    ) -> PyResult<()> {
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
         let scene = &mut timeline.scene;
         let a = aspect.unwrap_or(16.0 / 9.0);
         scene.camera.set_perspective(fovy, a, near, far);
@@ -233,16 +262,30 @@ impl PyScene {
     }
 
     #[pyo3(signature = (center_x, center_y, width, height))]
-    fn set_viewport(&mut self, center_x: f32, center_y: f32, width: f32, height: f32) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
+    fn set_viewport(
+        &mut self,
+        center_x: f32,
+        center_y: f32,
+        width: f32,
+        height: f32,
+    ) -> PyResult<()> {
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
         let scene = &mut timeline.scene;
-        scene.clip_rect = Some(gmanim_core::ClipRect::Logical(center_x, center_y, width, height));
+        scene.clip_rect = Some(gmanim_core::ClipRect::Logical(
+            center_x, center_y, width, height,
+        ));
         Ok(())
     }
 
     #[pyo3(signature = (x, y, width, height))]
     fn set_pixel_viewport(&mut self, x: u32, y: u32, width: u32, height: u32) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
         let scene = &mut timeline.scene;
         scene.clip_rect = Some(gmanim_core::ClipRect::Pixel(x, y, width, height));
         Ok(())
@@ -250,7 +293,10 @@ impl PyScene {
 
     #[pyo3(signature = (level))]
     fn set_anti_aliasing(&mut self, level: u32) -> PyResult<()> {
-        let timeline = self.inner.as_mut().ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
+        let timeline = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Timeline not found"))?;
         let scene = &mut timeline.scene;
         scene.aa_level = level;
         Ok(())
@@ -287,25 +333,33 @@ impl PyScene {
             self.inner.as_mut().unwrap().play(rust_update);
             Ok(())
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Unsupported animation type for Scene.play()"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Unsupported animation type for Scene.play()",
+            ))
         }
     }
 
     fn wait(&mut self, frames: u32) {
-        self.inner.as_mut().unwrap().play(gmanim_core::animation::Wait::new(frames));
+        self.inner
+            .as_mut()
+            .unwrap()
+            .play(gmanim_core::animation::Wait::new(frames));
     }
 
     fn run(&mut self, callback: pyo3::Py<pyo3::PyAny>) {
-        self.inner.as_mut().unwrap().run(move |scene: &mut gmanim_core::Scene| {
-            if let Some(_) = pyo3::Python::try_attach(|py| {
-                let scene_ref = PySceneRef::borrow(scene);
-                let py_scene_ref = pyo3::Bound::new(py, scene_ref).unwrap();
-                if let Err(e) = callback.call1(py, (py_scene_ref,)) {
-                    e.print(py);
-                    panic!("Python callback failed in Scene::run");
-                }
-            }) {}
-        });
+        self.inner
+            .as_mut()
+            .unwrap()
+            .run(move |scene: &mut gmanim_core::Scene| {
+                if let Some(_) = pyo3::Python::try_attach(|py| {
+                    let scene_ref = PySceneRef::borrow(scene);
+                    let py_scene_ref = pyo3::Bound::new(py, scene_ref).unwrap();
+                    if let Err(e) = callback.call1(py, (py_scene_ref,)) {
+                        e.print(py);
+                        panic!("Python callback failed in Scene::run");
+                    }
+                }) {}
+            });
     }
 
     #[pyo3(signature = (filename, fps=60, backend=None, show_progress=true, bitrate=None, ssaa_factor=None, msaa_samples=None))]
@@ -320,12 +374,12 @@ impl PyScene {
         msaa_samples: Option<u32>,
     ) -> PyResult<()> {
         let backend = backend.unwrap_or(crate::PyVideoBackend::Ffmpeg);
-        
+
         let (default_ssaa, default_msaa) = match backend {
             crate::PyVideoBackend::Vulkan => (1, 4),
             _ => (2, 8),
         };
-        
+
         let ssaa = ssaa_factor.unwrap_or(default_ssaa);
         let msaa = msaa_samples.unwrap_or(default_msaa);
 
@@ -361,45 +415,46 @@ impl PyScene {
         };
 
         let mut video_backend = match backend {
-            crate::PyVideoBackend::Vaapi => {
-                gmanim_core::video_backend::VideoBackend {
-                    backend_type: gmanim_core::video_backend::VideoBackendType::Vaapi(
-                        gmanim_core::video_backend::vaapi::FfmpegVaapiBackend::new(&video_config)
-                    )
-                }
+            crate::PyVideoBackend::Vaapi => gmanim_core::video_backend::VideoBackend {
+                backend_type: gmanim_core::video_backend::VideoBackendType::Vaapi(
+                    gmanim_core::video_backend::vaapi::FfmpegVaapiBackend::new(&video_config),
+                ),
             },
-            crate::PyVideoBackend::Ffmpeg => {
-                gmanim_core::video_backend::VideoBackend {
-                    backend_type: gmanim_core::video_backend::VideoBackendType::FfmpegPipe(
-                        gmanim_core::video_backend::FfmpegPipeBackend::new(
+            crate::PyVideoBackend::Ffmpeg => gmanim_core::video_backend::VideoBackend {
+                backend_type: gmanim_core::video_backend::VideoBackendType::FfmpegPipe(
+                    gmanim_core::video_backend::FfmpegPipeBackend::new(
+                        &video_config,
+                        gmanim_core::video_backend::FfmpegPipeEncoder::Libx264,
+                        false,
+                    ),
+                ),
+            },
+            crate::PyVideoBackend::Vulkan => gmanim_core::video_backend::VideoBackend {
+                backend_type: gmanim_core::video_backend::VideoBackendType::VulkanH264(
+                    pollster::block_on(
+                        gmanim_core::video_backend::vulkan_h264::VulkanH264Backend::new(
                             &video_config,
-                            gmanim_core::video_backend::FfmpegPipeEncoder::Libx264,
-                            false,
-                        )
-                    )
-                }
+                        ),
+                    ),
+                ),
             },
-            crate::PyVideoBackend::Vulkan => {
-                gmanim_core::video_backend::VideoBackend {
-                    backend_type: gmanim_core::video_backend::VideoBackendType::VulkanH264(
-                        pollster::block_on(gmanim_core::video_backend::vulkan_h264::VulkanH264Backend::new(&video_config))
-                    )
-                }
-            }
         };
 
         let mut frame_count: u64 = 0;
-        
-        let vk_ctx = pollster::block_on(gmanim_core::vulkan::context::VulkanContext::new()).unwrap();
+
+        let vk_ctx =
+            pollster::block_on(gmanim_core::vulkan::context::VulkanContext::new()).unwrap();
         let mut renderer = gmanim_core::vulkan::renderer::VulkanRenderer::new(
             std::sync::Arc::new(vk_ctx),
             gmanim_core::RendererConfig {
                 msaa_samples: msaa,
                 ssaa_factor: ssaa,
-            }
+            },
         );
 
-        if let gmanim_core::video_backend::VideoBackendType::VulkanH264(ref mut vulkan_backend) = video_backend.backend_type {
+        if let gmanim_core::video_backend::VideoBackendType::VulkanH264(ref mut vulkan_backend) =
+            video_backend.backend_type
+        {
             while timeline.advance_frame() {
                 renderer.render_scene_with_outputs(
                     &timeline.scene,
@@ -407,11 +462,15 @@ impl PyScene {
                     None,
                     gmanim_core::vulkan::renderer::RenderOutputs::VULKAN_VIDEO_ONLY,
                 );
-                let frame = renderer
-                    .get_vulkan_video_frame()
-                    .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Renderer did not produce a Vulkan video frame"))?;
-                vulkan_backend.submit_vulkan_frame(frame).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-                
+                let frame = renderer.get_vulkan_video_frame().ok_or_else(|| {
+                    pyo3::exceptions::PyRuntimeError::new_err(
+                        "Renderer did not produce a Vulkan video frame",
+                    )
+                })?;
+                vulkan_backend
+                    .submit_vulkan_frame(frame)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
                 if let Some(ref p) = pb {
                     frame_count += 1;
                     if frame_count % 60 == 0 {
@@ -434,7 +493,7 @@ impl PyScene {
                     buf.as_mut_slice().fill(0);
                 }
                 video_backend.submit_frame(buf);
-                
+
                 if let Some(ref p) = pb {
                     frame_count += 1;
                     if frame_count % 60 == 0 {
@@ -443,10 +502,102 @@ impl PyScene {
                 }
             }
         }
-        video_backend.close().map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        video_backend
+            .close()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         if let Some(p) = pb {
             p.finish_with_message("Render Complete");
         }
+        Ok(())
+    }
+
+    fn _get_render_info(&mut self) -> PyResult<(u32, u32, u32)> {
+        let timeline = self.inner.as_mut().unwrap();
+        let total_frames = timeline.total_frames();
+        let width = timeline.ctx.scene_config.output_width;
+        let height = timeline.ctx.scene_config.output_height;
+        Ok((total_frames, width, height))
+    }
+
+    #[pyo3(signature = (shm_id))]
+    fn _render_to_shm(&mut self, shm_id: &str) -> PyResult<()> {
+        let timeline = self.inner.as_mut().unwrap();
+        let shmem = shared_memory::ShmemConf::new()
+            .os_id(shm_id)
+            .open()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let vk_ctx =
+            pollster::block_on(gmanim_core::vulkan::context::VulkanContext::new()).unwrap();
+        let mut renderer = gmanim_core::vulkan::renderer::VulkanRenderer::new(
+            std::sync::Arc::new(vk_ctx),
+            gmanim_core::RendererConfig {
+                msaa_samples: 4,
+                ssaa_factor: 1,
+            },
+        );
+
+        let mut frame_idx = 0;
+        let header = unsafe { &mut *(shmem.as_ptr() as *mut crate::ipc::ShmHeader) };
+        let base_pixels_ptr = unsafe {
+            shmem
+                .as_ptr()
+                .add(std::mem::size_of::<crate::ipc::ShmHeader>())
+        };
+
+        header.width = timeline.ctx.scene_config.output_width;
+        header.height = timeline.ctx.scene_config.output_height;
+        header
+            .write_idx
+            .store(0, std::sync::atomic::Ordering::Release);
+        header
+            .read_idx
+            .store(0, std::sync::atomic::Ordering::Release);
+        header
+            .is_rendering
+            .store(true, std::sync::atomic::Ordering::Release);
+
+        let size_per_frame = (header.width * header.height * 4) as usize;
+
+        while timeline.advance_frame() {
+            // Wait if ring buffer is full (16 frames ahead)
+            while header.write_idx.load(std::sync::atomic::Ordering::Acquire)
+                >= header.read_idx.load(std::sync::atomic::Ordering::Acquire) + 16
+            {
+                std::thread::yield_now();
+            }
+
+            renderer.render_scene_with_outputs(
+                &timeline.scene,
+                &timeline.ctx.scene_config,
+                None,
+                gmanim_core::vulkan::renderer::RenderOutputs {
+                    cpu_nv12: false,
+                    vulkan_video: false,
+                    cpu_rgba: true,
+                    cpu_yuv444p: false,
+                },
+            );
+
+            let raw_bytes = renderer.get_rgba_bytes().unwrap();
+
+            // Ring buffer write
+            let buf_idx = frame_idx % 16;
+            let pixels_ptr = unsafe { base_pixels_ptr.add(buf_idx * size_per_frame) };
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), pixels_ptr, raw_bytes.len());
+            }
+
+            header
+                .write_idx
+                .store((frame_idx + 1) as u64, std::sync::atomic::Ordering::Release);
+            frame_idx += 1;
+        }
+
+        header
+            .is_rendering
+            .store(false, std::sync::atomic::Ordering::Release);
         Ok(())
     }
 }
@@ -458,7 +609,9 @@ pub struct PySceneRef {
 
 impl PySceneRef {
     pub fn borrow(scene: &mut gmanim_core::Scene) -> Self {
-        Self { ptr: scene as *mut gmanim_core::Scene }
+        Self {
+            ptr: scene as *mut gmanim_core::Scene,
+        }
     }
 }
 
@@ -477,17 +630,27 @@ impl PySceneRef {
                 scene.mobjects.remove(index);
                 Ok(())
             } else {
-                Err(pyo3::exceptions::PyIndexError::new_err("Index out of range"))
+                Err(pyo3::exceptions::PyIndexError::new_err(
+                    "Index out of range",
+                ))
             }
         } else if let Ok(mobj) = arg.extract::<PyMobject>() {
-            if let Some(pos) = scene.mobjects.iter().position(|m| Rc::ptr_eq(m, &mobj.inner)) {
+            if let Some(pos) = scene
+                .mobjects
+                .iter()
+                .position(|m| Rc::ptr_eq(m, &mobj.inner))
+            {
                 scene.mobjects.remove(pos);
                 Ok(())
             } else {
-                Err(pyo3::exceptions::PyValueError::new_err("Mobject not found in Scene"))
+                Err(pyo3::exceptions::PyValueError::new_err(
+                    "Mobject not found in Scene",
+                ))
             }
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Expected an index (int) or a Mobject"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Expected an index (int) or a Mobject",
+            ))
         }
     }
     #[pyo3(signature = (position=None, target=None, direction=None, up=None))]
@@ -502,7 +665,7 @@ impl PySceneRef {
         if let Some(pos) = position {
             scene.camera.position = nalgebra::Point3::new(pos.0, pos.1, pos.2);
         }
-        
+
         if let Some(t) = target {
             let target_point = nalgebra::Point3::new(t.0, t.1, t.2);
             let mut dir = target_point - scene.camera.position;
@@ -516,7 +679,7 @@ impl PySceneRef {
                 scene.camera.set_look_at(dir);
             }
         }
-        
+
         if let Some(u) = up {
             let up_dir = nalgebra::Vector3::new(u.0, u.1, u.2);
             if up_dir.norm_squared() >= 1e-6 {
@@ -527,18 +690,32 @@ impl PySceneRef {
     }
 
     #[pyo3(signature = (height=9.0, width=None, near=0.1, far=50.0))]
-    fn set_orthographic_camera(&mut self, height: f32, width: Option<f32>, near: f32, far: f32) -> PyResult<()> {
+    fn set_orthographic_camera(
+        &mut self,
+        height: f32,
+        width: Option<f32>,
+        near: f32,
+        far: f32,
+    ) -> PyResult<()> {
         let scene = unsafe { &mut *self.ptr };
         if scene.camera.position == nalgebra::Point3::new(0.0, 0.0, 0.0) {
             scene.camera.position = nalgebra::Point3::new(0.0, 0.0, 10.0);
         }
         let w = width.unwrap_or(height * (16.0 / 9.0));
-        scene.camera.set_orthographic(-w / 2.0, w / 2.0, -height / 2.0, height / 2.0, near, far);
+        scene
+            .camera
+            .set_orthographic(-w / 2.0, w / 2.0, -height / 2.0, height / 2.0, near, far);
         Ok(())
     }
 
     #[pyo3(signature = (fovy=std::f32::consts::PI/2.0, aspect=None, near=0.1, far=50.0))]
-    fn set_perspective_camera(&mut self, fovy: f32, aspect: Option<f32>, near: f32, far: f32) -> PyResult<()> {
+    fn set_perspective_camera(
+        &mut self,
+        fovy: f32,
+        aspect: Option<f32>,
+        near: f32,
+        far: f32,
+    ) -> PyResult<()> {
         let scene = unsafe { &mut *self.ptr };
         let a = aspect.unwrap_or(16.0 / 9.0);
         scene.camera.set_perspective(fovy, a, near, far);
@@ -553,9 +730,17 @@ impl PySceneRef {
     }
 
     #[pyo3(signature = (center_x, center_y, width, height))]
-    fn set_viewport(&mut self, center_x: f32, center_y: f32, width: f32, height: f32) -> PyResult<()> {
+    fn set_viewport(
+        &mut self,
+        center_x: f32,
+        center_y: f32,
+        width: f32,
+        height: f32,
+    ) -> PyResult<()> {
         let scene = unsafe { &mut *self.ptr };
-        scene.clip_rect = Some(gmanim_core::ClipRect::Logical(center_x, center_y, width, height));
+        scene.clip_rect = Some(gmanim_core::ClipRect::Logical(
+            center_x, center_y, width, height,
+        ));
         Ok(())
     }
 
