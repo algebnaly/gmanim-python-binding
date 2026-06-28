@@ -50,6 +50,30 @@ impl PyMobject {
         Ok(())
     }
 
+    #[pyo3(signature = (angle))]
+    fn rotate_x(&mut self, angle: f32) -> PyResult<()> {
+        let mat = self.inner.borrow().get_model_matrix();
+        let rot = nalgebra::Matrix4::new_rotation(nalgebra::Vector3::x() * angle);
+        self.inner.borrow_mut().set_model_matrix(mat * rot);
+        Ok(())
+    }
+
+    #[pyo3(signature = (angle))]
+    fn rotate_y(&mut self, angle: f32) -> PyResult<()> {
+        let mat = self.inner.borrow().get_model_matrix();
+        let rot = nalgebra::Matrix4::new_rotation(nalgebra::Vector3::y() * angle);
+        self.inner.borrow_mut().set_model_matrix(mat * rot);
+        Ok(())
+    }
+
+    #[pyo3(signature = (angle))]
+    fn rotate_z(&mut self, angle: f32) -> PyResult<()> {
+        let mat = self.inner.borrow().get_model_matrix();
+        let rot = nalgebra::Matrix4::new_rotation(nalgebra::Vector3::z() * angle);
+        self.inner.borrow_mut().set_model_matrix(mat * rot);
+        Ok(())
+    }
+
     fn get_position(&self) -> PyResult<(f32, f32, f32)> {
         let pos = self.inner.borrow().get_position();
         Ok((pos.x, pos.y, pos.z))
@@ -284,17 +308,43 @@ impl PyScene {
         });
     }
 
-    #[pyo3(signature = (filename, fps=60, backend="ffmpeg", show_progress=true))]
-    fn render(&mut self, filename: &str, fps: u32, backend: &str, show_progress: bool) -> PyResult<()> {
+    #[pyo3(signature = (filename, fps=60, backend=None, show_progress=true, bitrate=None, ssaa_factor=None, msaa_samples=None))]
+    fn render(
+        &mut self,
+        filename: &str,
+        fps: u32,
+        backend: Option<crate::PyVideoBackend>,
+        show_progress: bool,
+        bitrate: Option<u64>,
+        ssaa_factor: Option<u32>,
+        msaa_samples: Option<u32>,
+    ) -> PyResult<()> {
+        let backend = backend.unwrap_or(crate::PyVideoBackend::Ffmpeg);
+        
+        let (default_ssaa, default_msaa) = match backend {
+            crate::PyVideoBackend::Vulkan => (1, 4),
+            _ => (2, 8),
+        };
+        
+        let ssaa = ssaa_factor.unwrap_or(default_ssaa);
+        let msaa = msaa_samples.unwrap_or(default_msaa);
+
         let timeline = self.inner.as_mut().unwrap();
+
         let ow = timeline.ctx.scene_config.output_width;
         let oh = timeline.ctx.scene_config.output_height;
+        let mut color_order = gmanim_core::video_backend::ColorOrder::Nv12;
+        if let crate::PyVideoBackend::Ffmpeg = backend {
+            color_order = gmanim_core::video_backend::ColorOrder::Yuv444p;
+        }
+
         let video_config = gmanim_core::video_backend::VideoConfig {
-            filename: filename.to_owned(),
+            filename: filename.to_string(),
             framerate: fps,
             output_width: ow,
             output_height: oh,
-            color_order: gmanim_core::video_backend::ColorOrder::Nv12,
+            color_order,
+            bitrate,
         };
 
         let total_frames = timeline.total_frames() as u64;
@@ -310,57 +360,93 @@ impl PyScene {
             None
         };
 
-        let mut video_backend = if backend == "vaapi" {
-            gmanim_core::video_backend::VideoBackend {
-                backend_type: gmanim_core::video_backend::VideoBackendType::Vaapi(
-                    gmanim_core::video_backend::vaapi::FfmpegVaapiBackend::new(&video_config)
-                )
-            }
-        } else if backend == "ffmpeg" {
-            gmanim_core::video_backend::VideoBackend {
-                backend_type: gmanim_core::video_backend::VideoBackendType::FfmpegPipe(
-                    gmanim_core::video_backend::FfmpegPipeBackend::new(
-                        &video_config,
-                        gmanim_core::video_backend::FfmpegPipeEncoder::Libx264,
-                        false,
+        let mut video_backend = match backend {
+            crate::PyVideoBackend::Vaapi => {
+                gmanim_core::video_backend::VideoBackend {
+                    backend_type: gmanim_core::video_backend::VideoBackendType::Vaapi(
+                        gmanim_core::video_backend::vaapi::FfmpegVaapiBackend::new(&video_config)
                     )
-                )
+                }
+            },
+            crate::PyVideoBackend::Ffmpeg => {
+                gmanim_core::video_backend::VideoBackend {
+                    backend_type: gmanim_core::video_backend::VideoBackendType::FfmpegPipe(
+                        gmanim_core::video_backend::FfmpegPipeBackend::new(
+                            &video_config,
+                            gmanim_core::video_backend::FfmpegPipeEncoder::Libx264,
+                            false,
+                        )
+                    )
+                }
+            },
+            crate::PyVideoBackend::Vulkan => {
+                gmanim_core::video_backend::VideoBackend {
+                    backend_type: gmanim_core::video_backend::VideoBackendType::VulkanH264(
+                        pollster::block_on(gmanim_core::video_backend::vulkan_h264::VulkanH264Backend::new(&video_config))
+                    )
+                }
             }
-        } else {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!("Unsupported backend: {}", backend)));
         };
 
         let mut frame_count: u64 = 0;
-        while timeline.step_frame() {
-            let mut buf = video_backend.acquire_buffer();
-            if let Some(nv12_bytes) = timeline.nv12_image_bytes() {
-                buf.as_mut_slice().copy_from_slice(nv12_bytes);
-            } else {
-                buf.as_mut_slice().fill(0);
+        
+        let vk_ctx = pollster::block_on(gmanim_core::vulkan::context::VulkanContext::new()).unwrap();
+        let mut renderer = gmanim_core::vulkan::renderer::VulkanRenderer::new(
+            std::sync::Arc::new(vk_ctx),
+            gmanim_core::RendererConfig {
+                msaa_samples: msaa,
+                ssaa_factor: ssaa,
             }
-            video_backend.submit_frame(buf);
-            
-            if let Some(ref p) = pb {
-                frame_count += 1;
-                if frame_count % 60 == 0 {
-                    p.inc(60);
+        );
+
+        if let gmanim_core::video_backend::VideoBackendType::VulkanH264(ref mut vulkan_backend) = video_backend.backend_type {
+            while timeline.advance_frame() {
+                renderer.render_scene_with_outputs(
+                    &timeline.scene,
+                    &timeline.ctx.scene_config,
+                    None,
+                    gmanim_core::vulkan::renderer::RenderOutputs::VULKAN_VIDEO_ONLY,
+                );
+                let frame = renderer
+                    .get_vulkan_video_frame()
+                    .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Renderer did not produce a Vulkan video frame"))?;
+                vulkan_backend.submit_vulkan_frame(frame).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+                
+                if let Some(ref p) = pb {
+                    frame_count += 1;
+                    if frame_count % 60 == 0 {
+                        p.set_position(frame_count);
+                    }
+                }
+            }
+        } else {
+            while timeline.advance_frame() {
+                renderer.render_scene(&timeline.scene, &timeline.ctx.scene_config, None);
+                let mut buf = video_backend.acquire_buffer();
+                let bytes = if let crate::PyVideoBackend::Ffmpeg = backend {
+                    renderer.get_yuv444p_bytes()
+                } else {
+                    renderer.get_nv12_bytes()
+                };
+                if let Some(image_bytes) = bytes {
+                    buf.as_mut_slice().copy_from_slice(image_bytes);
+                } else {
+                    buf.as_mut_slice().fill(0);
+                }
+                video_backend.submit_frame(buf);
+                
+                if let Some(ref p) = pb {
+                    frame_count += 1;
+                    if frame_count % 60 == 0 {
+                        p.set_position(frame_count);
+                    }
                 }
             }
         }
-
-        if let Some(ref p) = pb {
-            let remainder = frame_count % 60;
-            if remainder != 0 {
-                p.inc(remainder);
-            }
-        }
-
-        video_backend.close().map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-
+        video_backend.close().map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         if let Some(p) = pb {
             p.finish_with_message("Render Complete");
         }
-
         Ok(())
     }
 }

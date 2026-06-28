@@ -6,8 +6,16 @@ pub mod animations;
 use pyo3::prelude::*;
 
 use scene::{PyScene, PySceneRef, PyMobject};
-use mobjects::{PyLine, PyRectangle, PyPolyLine, PyArc, PyDot, PyText, PySphere3D, PyLineSegment3D, PyArrow3D, PyBox3D, PyBox3DSdf};
+use mobjects::{PyLine, PyRectangle, PyPolyLine, PyArc, PyDot, PyText, PySphere3D, PyLineSegment3D, PyArrow3D, PyBox3D, PyBox3DSdf, PyMesh2DIn3D};
 use animations::{PyAnimation, PyMove, PyRotate, PyWait, PyUpdateFromFunc};
+
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(PartialEq, Clone, Debug)]
+pub enum PyVideoBackend {
+    Ffmpeg,
+    Vaapi,
+    Vulkan,
+}
 
 #[pymodule]
 pub fn gmanim(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -48,13 +56,18 @@ def incremental(func):
     m.add_class::<PySphere3D>()?;
     m.add_class::<PyLineSegment3D>()?;
     m.add_class::<PyArrow3D>()?;
-    m.add_class::<PyBox3DSdf>()?;
     m.add_class::<PyBox3D>()?;
+    m.add_class::<PyBox3DSdf>()?;
+    m.add_class::<PyMesh2DIn3D>()?;
     m.add_class::<mobjects::PyTriangleMesh3D>()?;
+    m.add_class::<mobjects::PyCylinder3D>()?;
+    m.add_class::<mobjects::PyCone3D>()?;
+    m.add_class::<mobjects::PyGroup>()?;
     m.add_class::<PyAnimation>()?;
     m.add_class::<PyMove>()?;
     m.add_class::<PyRotate>()?;
     m.add_class::<PyWait>()?;
     m.add_class::<PyUpdateFromFunc>()?;
+    m.add_class::<PyVideoBackend>()?;
     Ok(())
 }

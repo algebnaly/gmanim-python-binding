@@ -1,7 +1,7 @@
 [package]
 name = "gmanim-python-binding"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "gmanim"
@@ -13,6 +13,7 @@ pyo3 = { version = "0.28" }
 nalgebra = "0.35"
 tiny-skia = "0.12"
 indicatif = "0.17"
+pollster = "0.4.0"
 
 [features]
 default = ["extension-module"]
