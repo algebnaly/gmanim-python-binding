@@ -10,20 +10,26 @@ from gmanim.config import config
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("script")
-    parser.add_argument("--shm-id", required=True)
     parser.add_argument("--ctrl-socket", required=True)
     args = parser.parse_args()
 
     config.editor_mode = True
-    config.shm_id = args.shm_id
     config.ctrl_socket = args.ctrl_socket
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(args.script)))
 
-    # Hijack Scene.render so the user's script doesn't render mp4
-    gmanim.Scene.render = lambda self, *a, **kw: None
+    rendered_scenes = {}
 
-    # Execute user script to populate gmanim.registry
+    # In editor mode render publishes the completed scene instead of encoding video.
+    def publish_scene(scene, *args, **kwargs):
+        existing = rendered_scenes.get(scene.name)
+        if existing is not None and existing is not scene:
+            raise ValueError(f"duplicate rendered scene name: {scene.name!r}")
+        rendered_scenes[scene.name] = scene
+
+    gmanim.Scene.render = publish_scene
+
+    # Execute the user's normal entry point so Scene construction stays authoritative.
     runpy.run_path(args.script, run_name="__main__")
 
     # Connect to Editor
@@ -43,8 +49,10 @@ if __name__ == "__main__":
             ctrl_stream.write(data)
             ctrl_stream.flush()
 
-    scenes = list(gmanim.registry.keys())
+    scenes = list(rendered_scenes)
     send_event({"event": "scenes_info", "scenes": scenes})
+    pending_scene = None
+    preview = None
 
     while True:
         line = ctrl_stream.readline()
@@ -53,30 +61,56 @@ if __name__ == "__main__":
 
         cmd = json.loads(line.decode("utf-8"))
 
-        if cmd["cmd"] == "render_scene":
+        if cmd["cmd"] == "load_scene":
             scene_name = cmd.get("name", "")
-            func = gmanim.registry.get(scene_name)
-            if not func and scenes:
-                func = gmanim.registry[scenes[0]]
+            scene = rendered_scenes.get(scene_name)
+            if scene is None and scenes:
+                scene = rendered_scenes[scenes[0]]
 
-            if func:
-                scene = gmanim.Scene()
-                func(scene)
-
-                total_frames, width, height = scene._get_render_info()
+            if scene is not None:
+                total_frames, width, height, framerate = scene._get_render_info()
+                pending_scene = scene
+                preview = None
                 send_event(
                     {
-                        "event": "start_render",
+                        "event": "scene_ready",
                         "total_frames": total_frames,
                         "width": width,
                         "height": height,
+                        "framerate": framerate,
                     }
                 )
 
-                # C-Extension renders and pushes to SHM
-                scene._render_to_shm(args.shm_id)
+        elif cmd["cmd"] == "open_preview":
+            if pending_scene is None:
+                send_event({"event": "error", "message": "no scene is ready for preview"})
+                continue
+            try:
+                preview = pending_scene._open_preview(cmd["shm_id"])
+                pending_scene = None
+                send_event({"event": "preview_opened"})
+            except Exception as error:
+                send_event({"event": "error", "message": str(error)})
 
-                send_event({"event": "finish_render"})
+        elif cmd["cmd"] == "render_frame":
+            if preview is None:
+                send_event({"event": "error", "message": "preview is not open"})
+                continue
+            request_id = cmd["request_id"]
+            frame = cmd["frame"]
+            slot = cmd["slot"]
+            try:
+                preview.render_frame(request_id, frame, slot)
+                send_event(
+                    {
+                        "event": "frame_ready",
+                        "request_id": request_id,
+                        "frame": frame,
+                        "slot": slot,
+                    }
+                )
+            except Exception as error:
+                send_event({"event": "error", "message": str(error)})
 
         elif cmd["cmd"] == "quit":
             break

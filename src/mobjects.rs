@@ -1,18 +1,70 @@
-// src/mobjects.rs
-use crate::scene::PyMobject;
-use crate::utils::build_draw_config;
-use gmanim_core::Color;
-use gmanim_core::mobjects::object_3d::{Arrow3D, LineSegment3D, Sphere3D};
-use gmanim_core::mobjects::wrapper_3d::Wrapper2DIn3D;
-use gmanim_core::mobjects::{Arc, Dot, PolyLine, Rectangle, SimpleLine, text::Text};
-use pyo3::prelude::*;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::{
+    collections::HashSet,
+    sync::{Arc as Shared, Mutex},
+};
 
-#[pyclass(name = "Line", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyLine {
-    pub concrete: Rc<RefCell<SimpleLine>>,
+use gmanim_core::{
+    Color,
+    mobjects::{
+        Arc, Dot, Draw, Mobject, MobjectId, NodeBundle, NodeVisual, PolyLine, Rectangle,
+        RenderVisitor, SimpleLine,
+        mesh_2d::TriangleMesh2D,
+        mesh_3d::{SurfaceMaterial, TriangleMesh3D, Vertex},
+        object_3d::{Arrow3D, Box3DSdf, LineSegment3D, Sphere3D},
+        text::Text,
+        wrapper_3d::Wrapper2DIn3D,
+    },
+};
+use nalgebra::{Matrix4, Point3, Vector3};
+use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple};
+
+use crate::{scene::PyMobject, utils::build_draw_config};
+
+fn point(value: (f32, f32, f32)) -> Point3<f32> {
+    Point3::new(value.0, value.1, value.2)
 }
+
+fn core_color(value: Option<(u8, u8, u8, u8)>) -> Color {
+    value
+        .map(|value| Color::new(value.0, value.1, value.2, value.3))
+        .unwrap_or_default()
+}
+
+fn material(value: Option<(u8, u8, u8, u8)>) -> SurfaceMaterial {
+    let color = core_color(value);
+    SurfaceMaterial {
+        base_color: [
+            color.r as f32 / 255.0,
+            color.g as f32 / 255.0,
+            color.b as f32 / 255.0,
+            color.a as f32 / 255.0,
+        ],
+        ..Default::default()
+    }
+}
+
+fn mobject(name: &str, visual: NodeVisual) -> PyMobject {
+    PyMobject::detached(name, visual)
+}
+
+struct StaticMesh2D(TriangleMesh2D);
+
+impl Draw for StaticMesh2D {
+    fn draw(&self, _ctx: &mut gmanim_core::Context, _parent_matrix: Matrix4<f32>) {}
+}
+
+impl Mobject for StaticMesh2D {
+    fn default_name(&self) -> &'static str {
+        "StaticMesh2D"
+    }
+
+    fn submit_to_renderer(&self, visitor: &mut dyn RenderVisitor, transform: Matrix4<f32>) {
+        visitor.push_mesh_2d(&self.0, transform);
+    }
+}
+
+#[pyclass(name = "Line", extends=PyMobject, skip_from_py_object)]
+pub struct PyLine;
 
 #[pymethods]
 impl PyLine {
@@ -25,36 +77,26 @@ impl PyLine {
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let p0_val = p0.unwrap_or((-1.0, 0.0, 0.0));
-        let p1_val = p1.unwrap_or((1.0, 0.0, 0.0));
-        let draw_config = build_draw_config(stroke_width, fill, color);
-        let mut core_line = SimpleLine {
-            base: gmanim_core::mobjects::MobjectBase::new("Line"),
-            p0: nalgebra::Point3::new(p0_val.0, p0_val.1, p0_val.2),
-            p1: nalgebra::Point3::new(p1_val.0, p1_val.1, p1_val.2),
-            draw_config,
-            mesh: Default::default(),
-        };
-        core_line.update_mesh();
-        let concrete = Rc::new(RefCell::new(core_line));
+        let mut line = SimpleLine::new(
+            point(p0.unwrap_or((-1.0, 0.0, 0.0))),
+            point(p1.unwrap_or((1.0, 0.0, 0.0))),
+        );
+        line.draw_config = build_draw_config(stroke_width, fill, color);
+        line.update_mesh();
         (
-            PyLine {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Line", NodeVisual::Renderable(Shared::new(line))),
         )
     }
 }
 
-#[pyclass(name = "Rectangle", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyRectangle {
-    pub concrete: Rc<RefCell<Rectangle>>,
-}
+#[pyclass(name = "Rectangle", extends=PyMobject, skip_from_py_object)]
+pub struct PyRectangle;
 
 #[pymethods]
 impl PyRectangle {
     #[new]
-    #[pyo3(signature = (width=2.0, height=1.0, center=None, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (width=2.0, height=1.0, center=None, stroke_width=None, fill=None, color=None, corners=None))]
     fn new(
         width: f32,
         height: f32,
@@ -62,36 +104,38 @@ impl PyRectangle {
         stroke_width: Option<f32>,
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
-    ) -> (Self, PyMobject) {
-        let draw_config = build_draw_config(stroke_width, fill, color);
-        let c = center.unwrap_or((0.0, 0.0, 0.0));
-        let w = width / 2.0;
-        let h = height / 2.0;
-        let mut core_rect = Rectangle {
-            base: gmanim_core::mobjects::MobjectBase::new("Rectangle"),
-            p0: nalgebra::Point3::new(c.0 - w, c.1 + h, c.2),
-            p1: nalgebra::Point3::new(c.0 - w, c.1 - h, c.2),
-            p2: nalgebra::Point3::new(c.0 + w, c.1 - h, c.2),
-            p3: nalgebra::Point3::new(c.0 + w, c.1 + h, c.2),
-            color: Color::default(),
-            draw_config,
-            mesh: Default::default(),
+        corners: Option<Vec<(f32, f32, f32)>>,
+    ) -> PyResult<(Self, PyMobject)> {
+        let corners = if let Some(corners) = corners {
+            let corners: [(f32, f32, f32); 4] = corners.try_into().map_err(|_| {
+                PyValueError::new_err("corners must contain exactly four 3D points")
+            })?;
+            corners.map(point)
+        } else {
+            let center = center.unwrap_or((0.0, 0.0, 0.0));
+            let half_width = width / 2.0;
+            let half_height = height / 2.0;
+            [
+                Point3::new(center.0 - half_width, center.1 + half_height, center.2),
+                Point3::new(center.0 - half_width, center.1 - half_height, center.2),
+                Point3::new(center.0 + half_width, center.1 - half_height, center.2),
+                Point3::new(center.0 + half_width, center.1 + half_height, center.2),
+            ]
         };
-        core_rect.update_mesh();
-        let concrete = Rc::new(RefCell::new(core_rect));
-        (
-            PyRectangle {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
-        )
+        let rectangle = Rectangle {
+            p0: corners[0],
+            p1: corners[1],
+            p2: corners[2],
+            p3: corners[3],
+            color: core_color(color),
+            draw_config: build_draw_config(stroke_width, fill, color),
+        };
+        Ok((Self, mobject("Rectangle", NodeVisual::Rectangle(rectangle))))
     }
 }
 
-#[pyclass(name = "PolyLine", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyPolyLine {
-    pub concrete: Rc<RefCell<PolyLine>>,
-}
+#[pyclass(name = "PolyLine", extends=PyMobject, skip_from_py_object)]
+pub struct PyPolyLine;
 
 #[pymethods]
 impl PyPolyLine {
@@ -103,37 +147,23 @@ impl PyPolyLine {
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let pts: Vec<_> = points
-            .iter()
-            .map(|p| nalgebra::Point3::new(p.0, p.1, p.2))
-            .collect();
-        let draw_config = build_draw_config(stroke_width, fill, color);
-        let mut core_pline = PolyLine {
-            base: gmanim_core::mobjects::MobjectBase::new("PolyLine"),
-            points: pts,
-            draw_config,
-            mesh: Default::default(),
-        };
-        core_pline.update_mesh();
-        let concrete = Rc::new(RefCell::new(core_pline));
+        let mut polyline = PolyLine::new(points.into_iter().map(point).collect());
+        polyline.draw_config = build_draw_config(stroke_width, fill, color);
+        polyline.update_mesh();
         (
-            PyPolyLine {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("PolyLine", NodeVisual::Renderable(Shared::new(polyline))),
         )
     }
 }
 
-#[pyclass(name = "Arc", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyArc {
-    pub concrete: Rc<RefCell<Arc>>,
-}
+#[pyclass(name = "Arc", extends=PyMobject, skip_from_py_object)]
+pub struct PyArc;
 
 #[pymethods]
 impl PyArc {
     #[new]
-    #[pyo3(signature = (center=None, start_angle=0.0, end_angle=3.14159, radius=1.0, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (center=None, start_angle=0.0, end_angle=std::f32::consts::PI, radius=1.0, stroke_width=None, fill=None, color=None))]
     fn new(
         center: Option<(f32, f32, f32)>,
         start_angle: f32,
@@ -143,34 +173,28 @@ impl PyArc {
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let draw_config = build_draw_config(stroke_width, fill, color);
-        let ct = center.unwrap_or((0.0, 0.0, 0.0));
         let mut arc = Arc::new(
-            nalgebra::Point3::new(ct.0, ct.1, ct.2),
+            point(center.unwrap_or((0.0, 0.0, 0.0))),
             start_angle,
             end_angle,
             radius,
         );
-        arc.draw_config = draw_config;
-        let concrete = Rc::new(RefCell::new(arc));
+        arc.draw_config = build_draw_config(stroke_width, fill, color);
+        arc.update_mesh();
         (
-            PyArc {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Arc", NodeVisual::Renderable(Shared::new(arc))),
         )
     }
 }
 
-#[pyclass(name = "Dot", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyDot {
-    pub concrete: Rc<RefCell<Dot>>,
-}
+#[pyclass(name = "Dot", extends=PyMobject, skip_from_py_object)]
+pub struct PyDot;
 
 #[pymethods]
 impl PyDot {
     #[new]
-    #[pyo3(signature = (position=(0.0,0.0,0.0), radius=0.05, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (position=(0.0, 0.0, 0.0), radius=0.05, stroke_width=None, fill=None, color=None))]
     fn new(
         position: (f32, f32, f32),
         radius: f32,
@@ -178,35 +202,26 @@ impl PyDot {
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let draw_config = build_draw_config(stroke_width, fill, color);
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let core_dot = Dot::new(
-            nalgebra::Point3::new(position.0, position.1, position.2),
+        let dot = Dot::new(
+            point(position),
             radius,
-            c,
-            draw_config,
+            core_color(color),
+            build_draw_config(stroke_width, fill, color),
         );
-        let concrete = Rc::new(RefCell::new(core_dot));
         (
-            PyDot {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Dot", NodeVisual::Renderable(Shared::new(dot))),
         )
     }
 }
 
-#[pyclass(name = "Text", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyText {
-    pub concrete: Rc<RefCell<Text>>,
-}
+#[pyclass(name = "Text", extends=PyMobject, skip_from_py_object)]
+pub struct PyText;
 
 #[pymethods]
 impl PyText {
     #[new]
-    #[pyo3(signature = (text, position=(0.0,0.0,0.0), font_size=32.0, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (text, position=(0.0, 0.0, 0.0), font_size=32.0, stroke_width=None, fill=None, color=None))]
     fn new(
         text: String,
         position: (f32, f32, f32),
@@ -215,48 +230,47 @@ impl PyText {
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let draw_config = build_draw_config(stroke_width, fill, color);
-        let core_text = Text::new(
+        let text = Text::new(
             text,
-            nalgebra::Point3::new(position.0, position.1, position.2),
+            point(position),
             font_size,
-            draw_config,
+            build_draw_config(stroke_width, fill, color),
         );
-        let concrete = Rc::new(RefCell::new(core_text));
         (
-            PyText {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Text", NodeVisual::Renderable(Shared::new(text))),
         )
     }
 }
 
-#[pyclass(name = "Mesh2DIn3D", extends=PyMobject, subclass, skip_from_py_object, unsendable)]
-pub struct PyMesh2DIn3D {
-    pub concrete: Rc<RefCell<Wrapper2DIn3D>>,
-}
+#[pyclass(name = "Mesh2DIn3D", extends=PyMobject, subclass, skip_from_py_object)]
+pub struct PyMesh2DIn3D;
 
 #[pymethods]
 impl PyMesh2DIn3D {
     #[new]
-    fn new(inner: &pyo3::Bound<'_, PyMobject>) -> (Self, PyMobject) {
-        let inner_mobj = inner.borrow().inner.clone();
-        let wrapper = Wrapper2DIn3D::new("Mesh2DIn3D", inner_mobj);
-        let concrete = Rc::new(RefCell::new(wrapper));
-        (
-            PyMesh2DIn3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
-        )
+    fn new(inner: PyMobject) -> PyResult<(Self, PyMobject)> {
+        let visual = inner.detached_visual()?;
+        let wrapper = match visual {
+            NodeVisual::Renderable(renderable) => Wrapper2DIn3D { inner: renderable },
+            NodeVisual::Rectangle(rectangle) => {
+                Wrapper2DIn3D::new(StaticMesh2D(rectangle.tessellate()))
+            }
+            NodeVisual::None => {
+                return Err(PyValueError::new_err(
+                    "a renderless group cannot be wrapped as Mesh2DIn3D",
+                ));
+            }
+        };
+        Ok((
+            Self,
+            mobject("Mesh2DIn3D", NodeVisual::Renderable(Shared::new(wrapper))),
+        ))
     }
 }
 
-#[pyclass(name = "Sphere3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PySphere3D {
-    pub concrete: Rc<RefCell<Sphere3D>>,
-}
+#[pyclass(name = "Sphere3D", extends=PyMobject, skip_from_py_object)]
+pub struct PySphere3D;
 
 #[pymethods]
 impl PySphere3D {
@@ -267,37 +281,24 @@ impl PySphere3D {
         radius: f32,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let ct = center.unwrap_or((0.0, 0.0, 0.0));
-        let core_obj = Sphere3D {
-            base: gmanim_core::mobjects::MobjectBase::new("Sphere3D"),
-            radius,
-            color: c,
-        };
-        let concrete = Rc::new(RefCell::new(core_obj));
-        {
-            use gmanim_core::mobjects::Transform;
-            concrete
-                .borrow_mut()
-                .apply_transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                    ct.0, ct.1, ct.2,
-                )));
-        }
-        (
-            PySphere3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
-        )
+        let mut object = mobject(
+            "Sphere3D",
+            NodeVisual::Renderable(Shared::new(Sphere3D {
+                radius,
+                material: material(color),
+            })),
+        );
+        object
+            .set_detached_transform(Matrix4::new_translation(
+                &point(center.unwrap_or((0.0, 0.0, 0.0))).coords,
+            ))
+            .expect("new object is detached");
+        (Self, object)
     }
 }
 
-#[pyclass(name = "LineSegment3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyLineSegment3D {
-    pub concrete: Rc<RefCell<LineSegment3D>>,
-}
+#[pyclass(name = "LineSegment3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyLineSegment3D;
 
 #[pymethods]
 impl PyLineSegment3D {
@@ -309,32 +310,21 @@ impl PyLineSegment3D {
         radius: f32,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let pt_a = a.unwrap_or((-1.0, 0.0, 0.0));
-        let pt_b = b.unwrap_or((1.0, 0.0, 0.0));
-        let core_obj = LineSegment3D {
-            base: gmanim_core::mobjects::MobjectBase::new("LineSegment3D"),
-            a: nalgebra::Point3::new(pt_a.0, pt_a.1, pt_a.2),
-            b: nalgebra::Point3::new(pt_b.0, pt_b.1, pt_b.2),
+        let object = LineSegment3D {
+            a: point(a.unwrap_or((-1.0, 0.0, 0.0))),
+            b: point(b.unwrap_or((1.0, 0.0, 0.0))),
             radius,
-            color: c,
+            material: material(color),
         };
-        let concrete = Rc::new(RefCell::new(core_obj));
         (
-            PyLineSegment3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("LineSegment3D", NodeVisual::Renderable(Shared::new(object))),
         )
     }
 }
 
-#[pyclass(name = "Arrow3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyArrow3D {
-    pub concrete: Rc<RefCell<Arrow3D>>,
-}
+#[pyclass(name = "Arrow3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyArrow3D;
 
 #[pymethods]
 impl PyArrow3D {
@@ -348,34 +338,23 @@ impl PyArrow3D {
         head_length: f32,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let pt_a = start.unwrap_or((-1.0, 0.0, 0.0));
-        let pt_b = end.unwrap_or((1.0, 0.0, 0.0));
-        let core_obj = Arrow3D {
-            base: gmanim_core::mobjects::MobjectBase::new("Arrow3D"),
-            start: nalgebra::Point3::new(pt_a.0, pt_a.1, pt_a.2),
-            end: nalgebra::Point3::new(pt_b.0, pt_b.1, pt_b.2),
+        let object = Arrow3D {
+            start: point(start.unwrap_or((-1.0, 0.0, 0.0))),
+            end: point(end.unwrap_or((1.0, 0.0, 0.0))),
             shaft_radius,
             head_radius,
             head_length,
-            color: c,
+            material: material(color),
         };
-        let concrete = Rc::new(RefCell::new(core_obj));
         (
-            PyArrow3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Arrow3D", NodeVisual::Renderable(Shared::new(object))),
         )
     }
 }
 
-#[pyclass(name = "Box3DSdf", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyBox3DSdf {
-    pub concrete: Rc<RefCell<gmanim_core::mobjects::object_3d::Box3DSdf>>,
-}
+#[pyclass(name = "Box3DSdf", extends=PyMobject, skip_from_py_object)]
+pub struct PyBox3DSdf;
 
 #[pymethods]
 impl PyBox3DSdf {
@@ -386,41 +365,28 @@ impl PyBox3DSdf {
         size: Option<(f32, f32, f32)>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let ct = center.unwrap_or((0.0, 0.0, 0.0));
-        let sz = size.unwrap_or((1.0, 1.0, 1.0));
-        let core_obj = gmanim_core::mobjects::object_3d::Box3DSdf {
-            base: gmanim_core::mobjects::MobjectBase::new("Box3DSdf"),
-            size: nalgebra::Vector3::new(sz.0, sz.1, sz.2),
-            x_axis: nalgebra::Vector3::new(1.0, 0.0, 0.0),
-            y_axis: nalgebra::Vector3::new(0.0, 1.0, 0.0),
-            z_axis: nalgebra::Vector3::new(0.0, 0.0, 1.0),
-            color: c,
-        };
-        let concrete = Rc::new(RefCell::new(core_obj));
-        {
-            use gmanim_core::mobjects::Transform;
-            concrete
-                .borrow_mut()
-                .apply_transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                    ct.0, ct.1, ct.2,
-                )));
-        }
-        (
-            PyBox3DSdf {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
-        )
+        let size = size.unwrap_or((1.0, 1.0, 1.0));
+        let mut object = mobject(
+            "Box3DSdf",
+            NodeVisual::Renderable(Shared::new(Box3DSdf {
+                size: Vector3::new(size.0, size.1, size.2),
+                x_axis: Vector3::x(),
+                y_axis: Vector3::y(),
+                z_axis: Vector3::z(),
+                material: material(color),
+            })),
+        );
+        object
+            .set_detached_transform(Matrix4::new_translation(
+                &point(center.unwrap_or((0.0, 0.0, 0.0))).coords,
+            ))
+            .expect("new object is detached");
+        (Self, object)
     }
 }
 
-#[pyclass(name = "Box3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyBox3D {
-    pub concrete: Rc<RefCell<gmanim_core::mobjects::mesh_3d::TriangleMesh3D>>,
-}
+#[pyclass(name = "Box3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyBox3D;
 
 #[pymethods]
 impl PyBox3D {
@@ -431,36 +397,22 @@ impl PyBox3D {
         size: Option<(f32, f32, f32)>,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let ct = center.unwrap_or((0.0, 0.0, 0.0));
-        let sz = size.unwrap_or((1.0, 1.0, 1.0));
-        let mut core_obj = gmanim_core::mobjects::mesh_3d::TriangleMesh3D::box_mesh(
-            nalgebra::Point3::new(0.0, 0.0, 0.0),
-            nalgebra::Vector3::new(sz.0, sz.1, sz.2),
-            c,
+        let center = point(center.unwrap_or((0.0, 0.0, 0.0)));
+        let size = size.unwrap_or((1.0, 1.0, 1.0));
+        let mesh = TriangleMesh3D::box_mesh(
+            center,
+            Vector3::new(size.0, size.1, size.2),
+            core_color(color),
         );
-        {
-            use gmanim_core::mobjects::Transform;
-            core_obj.apply_transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                ct.0, ct.1, ct.2,
-            )));
-        }
-        let concrete = Rc::new(RefCell::new(core_obj));
         (
-            PyBox3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Box3D", NodeVisual::Renderable(Shared::new(mesh))),
         )
     }
 }
 
-#[pyclass(name = "TriangleMesh3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyTriangleMesh3D {
-    pub concrete: Rc<RefCell<gmanim_core::mobjects::mesh_3d::TriangleMesh3D>>,
-}
+#[pyclass(name = "TriangleMesh3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyTriangleMesh3D;
 
 #[pymethods]
 impl PyTriangleMesh3D {
@@ -474,44 +426,36 @@ impl PyTriangleMesh3D {
         color: (f32, f32, f32, f32),
         model_matrix: Option<[[f32; 4]; 4]>,
     ) -> (Self, PyMobject) {
-        let mut mesh_verts = Vec::new();
-        for i in 0..vertices.len() {
-            let p = vertices.get(i).copied().unwrap_or([0.0, 0.0, 0.0]);
-            let n = normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]);
-            let c = colors
-                .get(i)
-                .copied()
-                .unwrap_or([color.0, color.1, color.2, color.3]);
-            mesh_verts.push(gmanim_core::mobjects::mesh_3d::Vertex {
-                position: p,
-                normal: n,
-                color: c,
-            });
+        let vertices = vertices
+            .into_iter()
+            .enumerate()
+            .map(|(index, position)| {
+                let normal = normals.get(index).copied().unwrap_or([0.0, 0.0, 1.0]);
+                let vertex_color = colors
+                    .get(index)
+                    .copied()
+                    .unwrap_or([color.0, color.1, color.2, color.3]);
+                Vertex {
+                    position,
+                    normal,
+                    color: vertex_color,
+                    surface_coord: normal,
+                }
+            })
+            .collect();
+        let mesh = TriangleMesh3D::new(vertices, indices);
+        let mut object = mobject("TriangleMesh3D", NodeVisual::Renderable(Shared::new(mesh)));
+        if let Some(matrix) = model_matrix {
+            object
+                .set_detached_transform(Matrix4::from_row_slice(&matrix.concat()))
+                .expect("new object is detached");
         }
-        let mut mesh = gmanim_core::mobjects::mesh_3d::TriangleMesh3D::new(mesh_verts, indices);
-        if let Some(mat) = model_matrix {
-            let nalgebra_mat = nalgebra::Matrix4::from_row_slice(&[
-                mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
-                mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
-                mat[3][2], mat[3][3],
-            ]);
-            use gmanim_core::mobjects::Mobject;
-            mesh.set_model_matrix(nalgebra_mat);
-        }
-        let concrete = Rc::new(RefCell::new(mesh));
-        (
-            PyTriangleMesh3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
-        )
+        (Self, object)
     }
 }
 
-#[pyclass(name = "Cylinder3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyCylinder3D {
-    pub concrete: Rc<RefCell<gmanim_core::mobjects::mesh_3d::TriangleMesh3D>>,
-}
+#[pyclass(name = "Cylinder3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyCylinder3D;
 
 #[pymethods]
 impl PyCylinder3D {
@@ -524,34 +468,22 @@ impl PyCylinder3D {
         segments: u32,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let s = start.unwrap_or((0.0, 0.0, 0.0));
-        let e = end.unwrap_or((0.0, 1.0, 0.0));
-
-        let core_obj = gmanim_core::mobjects::mesh_3d::TriangleMesh3D::cylinder(
-            nalgebra::Point3::new(s.0, s.1, s.2),
-            nalgebra::Point3::new(e.0, e.1, e.2),
+        let mesh = TriangleMesh3D::cylinder(
+            point(start.unwrap_or((0.0, 0.0, 0.0))),
+            point(end.unwrap_or((0.0, 1.0, 0.0))),
             radius,
             segments,
-            c,
+            core_color(color),
         );
-
-        let concrete = Rc::new(RefCell::new(core_obj));
         (
-            PyCylinder3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Cylinder3D", NodeVisual::Renderable(Shared::new(mesh))),
         )
     }
 }
 
-#[pyclass(name = "Cone3D", extends=PyMobject, skip_from_py_object, unsendable)]
-pub struct PyCone3D {
-    pub concrete: Rc<RefCell<gmanim_core::mobjects::mesh_3d::TriangleMesh3D>>,
-}
+#[pyclass(name = "Cone3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyCone3D;
 
 #[pymethods]
 impl PyCone3D {
@@ -564,33 +496,23 @@ impl PyCone3D {
         segments: u32,
         color: Option<(u8, u8, u8, u8)>,
     ) -> (Self, PyMobject) {
-        let c = color
-            .map(|c| Color::new(c.0, c.1, c.2, c.3))
-            .unwrap_or_default();
-        let b = base_center.unwrap_or((0.0, 0.0, 0.0));
-        let t = tip.unwrap_or((0.0, 1.0, 0.0));
-
-        let core_obj = gmanim_core::mobjects::mesh_3d::TriangleMesh3D::cone(
-            nalgebra::Point3::new(b.0, b.1, b.2),
-            nalgebra::Point3::new(t.0, t.1, t.2),
+        let mesh = TriangleMesh3D::cone(
+            point(base_center.unwrap_or((0.0, 0.0, 0.0))),
+            point(tip.unwrap_or((0.0, 1.0, 0.0))),
             radius,
             segments,
-            c,
+            core_color(color),
         );
-
-        let concrete = Rc::new(RefCell::new(core_obj));
         (
-            PyCone3D {
-                concrete: concrete.clone(),
-            },
-            PyMobject { inner: concrete },
+            Self,
+            mobject("Cone3D", NodeVisual::Renderable(Shared::new(mesh))),
         )
     }
 }
 
-#[pyclass(name = "Group", extends=PyMobject, subclass, skip_from_py_object, unsendable)]
+#[pyclass(name = "Group", extends=PyMobject, subclass, skip_from_py_object)]
 pub struct PyGroup {
-    pub concrete: Rc<RefCell<gmanim_core::mobjects::group::MobjectGroup>>,
+    state: Shared<Mutex<crate::scene::ObjectState>>,
 }
 
 #[pymethods]
@@ -598,31 +520,189 @@ impl PyGroup {
     #[new]
     #[pyo3(signature = (*args, **_kwargs))]
     fn new(
-        args: &pyo3::Bound<'_, pyo3::types::PyTuple>,
-        _kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
-    ) -> (Self, PyMobject) {
-        let group = gmanim_core::mobjects::group::MobjectGroup::new();
-        let concrete = Rc::new(RefCell::new(group));
-
-        for arg in args.iter() {
-            if let Ok(py_mobj) = arg.extract::<pyo3::PyRef<PyMobject>>() {
-                use gmanim_core::mobjects::Mobject;
-                concrete.borrow_mut().add_child(py_mobj.inner.clone());
-            }
+        args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, pyo3::types::PyDict>>,
+    ) -> PyResult<(Self, PyMobject)> {
+        let base = mobject("Group", NodeVisual::None);
+        for argument in args.iter() {
+            base.add_detached_child(argument.extract::<PyMobject>()?)?;
         }
-
-        (
-            PyGroup {
-                concrete: concrete.clone(),
+        Ok((
+            Self {
+                state: base.state.clone(),
             },
-            PyMobject { inner: concrete },
-        )
+            base,
+        ))
     }
 
-    fn add(&self, obj: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<()> {
-        if let Ok(py_mobj) = obj.extract::<pyo3::PyRef<PyMobject>>() {
-            use gmanim_core::mobjects::Mobject;
-            self.concrete.borrow_mut().add_child(py_mobj.inner.clone());
+    fn add(&self, object: PyMobject) -> PyResult<()> {
+        PyMobject {
+            state: self.state.clone(),
+        }
+        .add_detached_child(object)
+    }
+
+    fn remove(&self, object: PyMobject) -> PyResult<()> {
+        PyMobject {
+            state: self.state.clone(),
+        }
+        .remove_detached_child(&object)
+    }
+}
+
+pub(crate) struct ObjectState {
+    pub(crate) name: String,
+    pub(crate) visual: NodeVisual,
+    pub(crate) transform: Matrix4<f32>,
+    pub(crate) children: Vec<PyMobject>,
+    pub(crate) attachment: Option<Attachment>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Attachment {
+    pub scene_token: u64,
+    pub id: MobjectId,
+}
+
+impl PyMobject {
+    pub(crate) fn detached(name: impl Into<String>, visual: NodeVisual) -> Self {
+        Self {
+            state: Shared::new(Mutex::new(ObjectState {
+                name: name.into(),
+                visual,
+                transform: Matrix4::identity(),
+                children: Vec::new(),
+                attachment: None,
+            })),
+        }
+    }
+
+    pub(crate) fn attachment(&self, scene_token: u64) -> PyResult<Attachment> {
+        let attachment = self.state.lock().unwrap().attachment.ok_or_else(|| {
+            PyValueError::new_err("mobject must be added to a scene before it can be animated")
+        })?;
+        if attachment.scene_token != scene_token {
+            return Err(PyValueError::new_err(
+                "mobject belongs to a different scene",
+            ));
+        }
+        Ok(attachment)
+    }
+
+    pub(crate) fn detached_visual(&self) -> PyResult<NodeVisual> {
+        let state = self.state.lock().unwrap();
+        if state.attachment.is_some() {
+            return Err(PyValueError::new_err(
+                "operation requires a detached mobject blueprint",
+            ));
+        }
+        Ok(state.visual.clone())
+    }
+
+    pub(crate) fn set_detached_transform(&mut self, transform: Matrix4<f32>) -> PyResult<()> {
+        let mut state = self.state.lock().unwrap();
+        if state.attachment.is_some() {
+            return Err(PyValueError::new_err(
+                "attached mobjects are modified through Scene or SceneFrame",
+            ));
+        }
+        state.transform = transform;
+        Ok(())
+    }
+
+    pub(crate) fn add_detached_child(&self, child: PyMobject) -> PyResult<()> {
+        if Shared::ptr_eq(&self.state, &child.state) {
+            return Err(PyValueError::new_err("a mobject cannot contain itself"));
+        }
+        let mut state = self.state.lock().unwrap();
+        if state.attachment.is_some() || child.state.lock().unwrap().attachment.is_some() {
+            return Err(PyValueError::new_err(
+                "group composition must be completed before adding it to a scene",
+            ));
+        }
+        if state
+            .children
+            .iter()
+            .any(|existing| Shared::ptr_eq(&existing.state, &child.state))
+        {
+            return Err(PyValueError::new_err(
+                "mobject is already a direct child of this group",
+            ));
+        }
+        state.children.push(child);
+        Ok(())
+    }
+
+    pub(crate) fn remove_detached_child(&self, child: &PyMobject) -> PyResult<()> {
+        let mut state = self.state.lock().unwrap();
+        if state.attachment.is_some() {
+            return Err(PyValueError::new_err(
+                "attached hierarchy is modified through Scene",
+            ));
+        }
+        let index = state
+            .children
+            .iter()
+            .position(|existing| Shared::ptr_eq(&existing.state, &child.state))
+            .ok_or_else(|| PyValueError::new_err("mobject is not a child of this group"))?;
+        state.children.remove(index);
+        Ok(())
+    }
+
+    pub(crate) fn build_bundle_tree(&self) -> PyResult<(NodeBundle, Vec<PyMobject>)> {
+        fn build(
+            object: &PyMobject,
+            visiting: &mut HashSet<usize>,
+            handles: &mut Vec<PyMobject>,
+        ) -> PyResult<NodeBundle> {
+            let key = Shared::as_ptr(&object.state) as usize;
+            if !visiting.insert(key) {
+                return Err(PyValueError::new_err(
+                    "mobject hierarchy contains a cycle or repeated node",
+                ));
+            }
+            let state = object.state.lock().unwrap();
+            if state.attachment.is_some() {
+                return Err(PyValueError::new_err(
+                    "mobject has already been added to a scene",
+                ));
+            }
+            let name = state.name.clone();
+            let transform = state.transform;
+            let visual = state.visual.clone();
+            let children = state.children.clone();
+            drop(state);
+
+            handles.push(object.clone());
+            let mut bundle = NodeBundle {
+                name,
+                transform,
+                visual,
+                children: Vec::with_capacity(children.len()),
+            };
+            for child in children {
+                bundle.children.push(build(&child, visiting, handles)?);
+            }
+            Ok(bundle)
+        }
+
+        let mut handles = Vec::new();
+        let bundle = build(self, &mut HashSet::new(), &mut handles)?;
+        Ok((bundle, handles))
+    }
+
+    pub(crate) fn attach_tree(
+        handles: Vec<PyMobject>,
+        ids: Vec<MobjectId>,
+        scene_token: u64,
+    ) -> PyResult<()> {
+        if handles.len() != ids.len() {
+            return Err(PyValueError::new_err(
+                "core returned an inconsistent mobject tree",
+            ));
+        }
+        for (handle, id) in handles.into_iter().zip(ids) {
+            handle.state.lock().unwrap().attachment = Some(Attachment { scene_token, id });
         }
         Ok(())
     }

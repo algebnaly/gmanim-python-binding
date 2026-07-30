@@ -11,7 +11,7 @@ use mobjects::{
     PyArc, PyArrow3D, PyBox3D, PyBox3DSdf, PyDot, PyLine, PyLineSegment3D, PyMesh2DIn3D,
     PyPolyLine, PyRectangle, PySphere3D, PyText,
 };
-use scene::{PyMobject, PyScene, PySceneRef};
+use scene::{PyMobject, PyPreviewSession, PyScene, PySceneFrame};
 
 #[pyclass(eq, eq_int, from_py_object)]
 #[derive(PartialEq, Clone, Debug)]
@@ -21,35 +21,69 @@ pub enum PyVideoBackend {
     Vulkan,
 }
 
-#[pymodule]
-pub fn gmanim(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let code = c"
-registry = {}
-def scene(name):
-    def decorator(func):
-        registry[name] = func
-        return func
-    return decorator
+#[pyclass(name = "H264RateControl", eq, eq_int, from_py_object)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
+pub enum PyH264RateControl {
+    #[default]
+    Vbr,
+    Cbr,
+    Disabled,
+}
 
-def incremental(func):
-    func.__incremental__ = True
-    return func
-";
-    let temp_module = pyo3::types::PyModule::from_code(py, code, c"", c"")?;
-    m.setattr("registry", temp_module.getattr("registry")?)?;
-    m.setattr("scene", temp_module.getattr("scene")?)?;
-    m.setattr("incremental", temp_module.getattr("incremental")?)?;
+#[pyclass(name = "VulkanH264Config", get_all, from_py_object)]
+#[derive(Clone, Debug)]
+pub struct PyVulkanH264Config {
+    pub use_p_frames: bool,
+    pub gop_size: u32,
+    pub rate_control: PyH264RateControl,
+}
 
-    if let Ok(all) = m.getattr("__all__") {
-        if let Ok(all_list) = all.cast::<pyo3::types::PyList>() {
-            let _ = all_list.append("registry");
-            let _ = all_list.append("scene");
-            let _ = all_list.append("incremental");
+impl Default for PyVulkanH264Config {
+    fn default() -> Self {
+        Self {
+            use_p_frames: true,
+            gop_size: 60,
+            rate_control: PyH264RateControl::Vbr,
         }
     }
+}
 
+#[pymethods]
+impl PyVulkanH264Config {
+    #[new]
+    #[pyo3(signature = (use_p_frames=true, gop_size=60, rate_control=PyH264RateControl::Vbr))]
+    fn new(use_p_frames: bool, gop_size: u32, rate_control: PyH264RateControl) -> Self {
+        Self {
+            use_p_frames,
+            gop_size,
+            rate_control,
+        }
+    }
+}
+
+impl PyVulkanH264Config {
+    pub fn to_core(&self) -> gmanim_core::video_backend::vulkan_h264::VulkanH264EncoderConfig {
+        use gmanim_core::video_backend::vulkan_h264::{
+            H264RateControlPolicy, VulkanH264EncoderConfig,
+        };
+
+        VulkanH264EncoderConfig {
+            use_p_frames: self.use_p_frames,
+            gop_size: self.gop_size,
+            rate_control: match self.rate_control {
+                PyH264RateControl::Vbr => H264RateControlPolicy::Vbr,
+                PyH264RateControl::Cbr => H264RateControlPolicy::Cbr,
+                PyH264RateControl::Disabled => H264RateControlPolicy::Disabled,
+            },
+        }
+    }
+}
+
+#[pymodule]
+pub fn gmanim(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyScene>()?;
-    m.add_class::<PySceneRef>()?;
+    m.add_class::<PyPreviewSession>()?;
+    m.add_class::<PySceneFrame>()?;
     m.add_class::<PyMobject>()?;
     m.add_class::<PyLine>()?;
     m.add_class::<PyRectangle>()?;
@@ -73,5 +107,7 @@ def incremental(func):
     m.add_class::<PyWait>()?;
     m.add_class::<PyUpdateFromFunc>()?;
     m.add_class::<PyVideoBackend>()?;
+    m.add_class::<PyH264RateControl>()?;
+    m.add_class::<PyVulkanH264Config>()?;
     Ok(())
 }

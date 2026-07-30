@@ -9,11 +9,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 gmanim_core = { package = "gmanim-core", path = "../gmanim" }
+gmanim-editor-protocol = { path = "../gmanim-editor/protocol" }
 pyo3 = { version = "0.28" }
 nalgebra = "0.35"
-tiny-skia = "0.12"
 indicatif = "0.17"
-pollster = "0.4.0"
 shared_memory = "0.12.4"
 interprocess = "2.4.2"
 serde = { version = "1.0.228", features = ["derive"] }

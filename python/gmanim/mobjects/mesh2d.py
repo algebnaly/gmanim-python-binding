@@ -1,14 +1,18 @@
+from collections.abc import Sequence
+from typing import Optional
+
 import gmanim.gmanim as _gmanim
+from gmanim.types import Color, Point3
 
 
 class Line2DMesh3D(_gmanim.Mesh2DIn3D):
     def __new__(
         cls,
-        p0=(0.0, 0.0, 0.0),
-        p1=(1.0, 0.0, 0.0),
-        stroke_width=2.0,
-        color=(255, 255, 255, 255),
-    ):
+        p0: Point3 = (0.0, 0.0, 0.0),
+        p1: Point3 = (1.0, 0.0, 0.0),
+        stroke_width: float = 2.0,
+        color: Color = (255, 255, 255, 255),
+    ) -> "Line2DMesh3D":
         inner = _gmanim.Line(p0=p0, p1=p1, stroke_width=stroke_width, color=color)
         return super().__new__(cls, inner)
 
@@ -16,14 +20,14 @@ class Line2DMesh3D(_gmanim.Mesh2DIn3D):
 class Arc2DMesh3D(_gmanim.Mesh2DIn3D):
     def __new__(
         cls,
-        center=(0.0, 0.0, 0.0),
-        start_angle=0.0,
-        end_angle=6.28,
-        radius=1.0,
-        stroke_width=2.0,
-        fill=False,
-        color=(255, 255, 255, 255),
-    ):
+        center: Point3 = (0.0, 0.0, 0.0),
+        start_angle: float = 0.0,
+        end_angle: float = 6.28,
+        radius: float = 1.0,
+        stroke_width: float = 2.0,
+        fill: bool = False,
+        color: Color = (255, 255, 255, 255),
+    ) -> "Arc2DMesh3D":
         inner = _gmanim.Arc(
             center=center,
             start_angle=start_angle,
@@ -38,13 +42,17 @@ class Arc2DMesh3D(_gmanim.Mesh2DIn3D):
 
 class Rectangle2DMesh3D(_gmanim.Mesh2DIn3D):
     def __new__(
-        cls, p0, p1, p2, p3, stroke_width=2.0, fill=False, color=(255, 255, 255, 255)
-    ):
+        cls,
+        p0: Point3,
+        p1: Point3,
+        p2: Point3,
+        p3: Point3,
+        stroke_width: float = 2.0,
+        fill: bool = False,
+        color: Color = (255, 255, 255, 255),
+    ) -> "Rectangle2DMesh3D":
         inner = _gmanim.Rectangle(
-            p0=p0,
-            p1=p1,
-            p2=p2,
-            p3=p3,
+            corners=[p0, p1, p2, p3],
             stroke_width=stroke_width,
             fill=fill,
             color=color,
@@ -53,7 +61,13 @@ class Rectangle2DMesh3D(_gmanim.Mesh2DIn3D):
 
 
 class PolyLine2DMesh3D(_gmanim.Mesh2DIn3D):
-    def __new__(cls, points, stroke_width=2.0, fill=False, color=(255, 255, 255, 255)):
+    def __new__(
+        cls,
+        points: Sequence[Point3],
+        stroke_width: float = 2.0,
+        fill: bool = False,
+        color: Color = (255, 255, 255, 255),
+    ) -> "PolyLine2DMesh3D":
         inner = _gmanim.PolyLine(
             points=points, stroke_width=stroke_width, fill=fill, color=color
         )
@@ -63,13 +77,13 @@ class PolyLine2DMesh3D(_gmanim.Mesh2DIn3D):
 class Text2DMesh3D(_gmanim.Mesh2DIn3D):
     def __new__(
         cls,
-        text,
-        position=(0.0, 0.0, 0.0),
-        font_size=32.0,
-        stroke_width=None,
-        fill=None,
-        color=None,
-    ):
+        text: str,
+        position: Point3 = (0.0, 0.0, 0.0),
+        font_size: float = 32.0,
+        stroke_width: Optional[float] = None,
+        fill: Optional[bool] = None,
+        color: Optional[Color] = None,
+    ) -> "Text2DMesh3D":
         inner = _gmanim.Text(
             text=text,
             position=position,

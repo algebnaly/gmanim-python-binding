@@ -1,25 +1,35 @@
-// src/animations.rs
-use crate::scene::PyMobject;
 use pyo3::prelude::*;
 
+use crate::scene::PyMobject;
+
+pub enum PyAnimationSpec {
+    Move {
+        target: PyMobject,
+        displacement: (f32, f32, f32),
+        frames: u32,
+    },
+    Rotate {
+        target: PyMobject,
+        axis: (f32, f32, f32),
+        center: (f32, f32, f32),
+        frames: u32,
+    },
+    Wait {
+        frames: u32,
+    },
+    UpdateFromFunc {
+        callback: Py<PyAny>,
+        frames: u32,
+    },
+}
+
 #[pyclass(name = "Animation", subclass)]
-pub struct PyAnimation {}
-
-#[pymethods]
-impl PyAnimation {
-    #[new]
-    fn new() -> Self {
-        PyAnimation {}
-    }
+pub struct PyAnimation {
+    pub spec: PyAnimationSpec,
 }
 
-#[pyclass(name = "Move", extends=PyAnimation, skip_from_py_object, unsendable)]
-#[derive(Clone)]
-pub struct PyMove {
-    pub target: PyMobject,
-    pub displacement: (f32, f32, f32),
-    pub frames: u32,
-}
+#[pyclass(name = "Move", extends=PyAnimation, skip_from_py_object)]
+pub struct PyMove;
 
 #[pymethods]
 impl PyMove {
@@ -27,24 +37,20 @@ impl PyMove {
     #[pyo3(signature = (target, displacement, frames=60))]
     fn new(target: PyMobject, displacement: (f32, f32, f32), frames: u32) -> (Self, PyAnimation) {
         (
-            PyMove {
-                target,
-                displacement,
-                frames,
+            Self,
+            PyAnimation {
+                spec: PyAnimationSpec::Move {
+                    target,
+                    displacement,
+                    frames,
+                },
             },
-            PyAnimation {},
         )
     }
 }
 
-#[pyclass(name = "Rotate", extends=PyAnimation, skip_from_py_object, unsendable)]
-#[derive(Clone)]
-pub struct PyRotate {
-    pub target: PyMobject,
-    pub axis: (f32, f32, f32),
-    pub center: (f32, f32, f32),
-    pub frames: u32,
-}
+#[pyclass(name = "Rotate", extends=PyAnimation, skip_from_py_object)]
+pub struct PyRotate;
 
 #[pymethods]
 impl PyRotate {
@@ -57,64 +63,49 @@ impl PyRotate {
         frames: u32,
     ) -> (Self, PyAnimation) {
         (
-            PyRotate {
-                target,
-                axis,
-                center,
-                frames,
+            Self,
+            PyAnimation {
+                spec: PyAnimationSpec::Rotate {
+                    target,
+                    axis,
+                    center,
+                    frames,
+                },
             },
-            PyAnimation {},
         )
     }
 }
 
 #[pyclass(name = "Wait", extends=PyAnimation, skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyWait {
-    pub frames: u32,
-}
+pub struct PyWait;
 
 #[pymethods]
 impl PyWait {
     #[new]
     #[pyo3(signature = (frames=60))]
     fn new(frames: u32) -> (Self, PyAnimation) {
-        (PyWait { frames }, PyAnimation {})
+        (
+            Self,
+            PyAnimation {
+                spec: PyAnimationSpec::Wait { frames },
+            },
+        )
     }
 }
 
-#[pyclass(name = "UpdateFromFunc", extends=PyAnimation, skip_from_py_object, unsendable)]
-pub struct PyUpdateFromFunc {
-    pub callback: pyo3::Py<pyo3::PyAny>,
-    pub frames: u32,
-    pub is_pure: bool,
-}
+#[pyclass(name = "UpdateFromFunc", extends=PyAnimation, skip_from_py_object)]
+pub struct PyUpdateFromFunc;
 
 #[pymethods]
 impl PyUpdateFromFunc {
     #[new]
-    #[pyo3(signature = (callback, frames=60, is_pure=None))]
-    fn new(
-        py: pyo3::Python<'_>,
-        callback: pyo3::Py<pyo3::PyAny>,
-        frames: u32,
-        is_pure: Option<bool>,
-    ) -> (Self, PyAnimation) {
-        let is_pure = is_pure.unwrap_or_else(|| {
-            let is_incremental = callback
-                .bind(py)
-                .getattr("__incremental__")
-                .map(|x| x.is_truthy().unwrap_or(false))
-                .unwrap_or(false);
-            !is_incremental
-        });
+    #[pyo3(signature = (callback, frames=60))]
+    fn new(callback: Py<PyAny>, frames: u32) -> (Self, PyAnimation) {
         (
-            PyUpdateFromFunc {
-                callback,
-                frames,
-                is_pure,
+            Self,
+            PyAnimation {
+                spec: PyAnimationSpec::UpdateFromFunc { callback, frames },
             },
-            PyAnimation {},
         )
     }
 }

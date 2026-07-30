@@ -1,4 +1,9 @@
+import math
+
 import gmanim.gmanim as _gmanim
+from gmanim.gmanim import Cone3D, Cylinder3D, Group
+from gmanim.types import Color
+
 from .mesh2d import Line2DMesh3D, PolyLine2DMesh3D
 
 
@@ -7,18 +12,25 @@ class Axes3DRound(_gmanim.Group):
     A 3D coordinate system (Axes) composed of 3 Cylinders and 3 Cones.
     """
 
+    x_cylinder: Cylinder3D
+    x_cone: Cone3D
+    y_cylinder: Cylinder3D
+    y_cone: Cone3D
+    z_cylinder: Cylinder3D
+    z_cone: Cone3D
+
     def __init__(
         self,
-        length=3.0,
-        radius=0.05,
-        head_radius=0.15,
-        head_length=0.5,
-        backward_length=1.0,  # Negative extension
-        axis_color=(150, 150, 150, 255),  # Gray shaft
-        x_color=(235, 83, 83, 255),  # Softer Red (Coral)
-        y_color=(75, 181, 67, 255),  # Softer Green
-        z_color=(54, 162, 235, 255),  # Softer Blue
-    ):
+        length: float = 3.0,
+        radius: float = 0.05,
+        head_radius: float = 0.15,
+        head_length: float = 0.5,
+        backward_length: float = 1.0,
+        axis_color: Color = (150, 150, 150, 255),
+        x_color: Color = (235, 83, 83, 255),
+        y_color: Color = (75, 181, 67, 255),
+        z_color: Color = (54, 162, 235, 255),
+    ) -> None:
         super().__init__()
 
         # X-axis
@@ -76,22 +88,24 @@ class Axes3D(_gmanim.Group):
     A 3D coordinate system (Axes) composed of thickness-less 2D Lines with perspective.
     """
 
+    x_axis: Group
+    y_axis: Group
+    z_axis: Group
+
     def __init__(
         self,
-        length=3.0,
-        head_size=0.15,
-        stroke_width=0.05,
-        backward_length=1.0,  # Negative extension
-        axis_color=(150, 150, 150, 255),  # Gray shaft
-        x_color=(235, 83, 83, 255),  # Softer Red (Coral)
-        y_color=(75, 181, 67, 255),  # Softer Green
-        z_color=(54, 162, 235, 255),  # Softer Blue
-    ):
+        length: float = 3.0,
+        head_size: float = 0.15,
+        stroke_width: float = 0.05,
+        backward_length: float = 1.0,
+        axis_color: Color = (150, 150, 150, 255),
+        x_color: Color = (235, 83, 83, 255),
+        y_color: Color = (75, 181, 67, 255),
+        z_color: Color = (54, 162, 235, 255),
+    ) -> None:
         super().__init__()
 
-        import math
-
-        def make_arrow(color):
+        def make_arrow(color: Color) -> Group:
             group = _gmanim.Group()
             line = Line2DMesh3D(
                 p0=(-backward_length, 0.0, 0.0),
