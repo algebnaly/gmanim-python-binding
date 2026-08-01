@@ -30,7 +30,7 @@ fn core_color(value: Option<(u8, u8, u8, u8)>) -> Color {
         .unwrap_or_default()
 }
 
-fn material(value: Option<(u8, u8, u8, u8)>) -> SurfaceMaterial {
+fn material(value: Option<(u8, u8, u8, u8)>, unlit: bool, flat_shading: bool) -> SurfaceMaterial {
     let color = core_color(value);
     SurfaceMaterial {
         base_color: [
@@ -39,13 +39,40 @@ fn material(value: Option<(u8, u8, u8, u8)>) -> SurfaceMaterial {
             color.b as f32 / 255.0,
             color.a as f32 / 255.0,
         ],
+        unlit,
+        flat_shading,
         ..Default::default()
     }
+}
+
+fn apply_mesh_shading(mesh: &mut TriangleMesh3D, unlit: bool, flat_shading: bool) {
+    mesh.material.unlit = unlit;
+    mesh.material.flat_shading = flat_shading;
 }
 
 fn mobject(name: &str, visual: NodeVisual) -> PyMobject {
     PyMobject::detached(name, visual)
 }
+fn apply_initial_transform(
+    mut mobj: PyMobject,
+    position: Option<(f32, f32, f32)>,
+    rotation: Option<(f32, f32, f32)>,
+) -> PyMobject {
+    let mut transform = nalgebra::Matrix4::identity();
+    if let Some(rot) = rotation {
+        transform = transform * nalgebra::Matrix4::new_rotation(nalgebra::Vector3::z() * rot.2);
+        transform = transform * nalgebra::Matrix4::new_rotation(nalgebra::Vector3::y() * rot.1);
+        transform = transform * nalgebra::Matrix4::new_rotation(nalgebra::Vector3::x() * rot.0);
+    }
+    if let Some(pos) = position {
+        transform[(0, 3)] = pos.0;
+        transform[(1, 3)] = pos.1;
+        transform[(2, 3)] = pos.2;
+    }
+    mobj.set_detached_transform(transform).unwrap();
+    mobj
+}
+
 
 struct StaticMesh2D(TriangleMesh2D);
 
@@ -69,13 +96,15 @@ pub struct PyLine;
 #[pymethods]
 impl PyLine {
     #[new]
-    #[pyo3(signature = (p0=None, p1=None, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (p0=None, p1=None, stroke_width=None, fill=None, color=None, position=None, rotation=None))]
     fn new(
         p0: Option<(f32, f32, f32)>,
         p1: Option<(f32, f32, f32)>,
         stroke_width: Option<f32>,
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
+        position: Option<(f32, f32, f32)>,
+        rotation: Option<(f32, f32, f32)>,
     ) -> (Self, PyMobject) {
         let mut line = SimpleLine::new(
             point(p0.unwrap_or((-1.0, 0.0, 0.0))),
@@ -85,7 +114,7 @@ impl PyLine {
         line.update_mesh();
         (
             Self,
-            mobject("Line", NodeVisual::Renderable(Shared::new(line))),
+            apply_initial_transform(mobject("Line", NodeVisual::Renderable(Shared::new(line))), position, rotation),
         )
     }
 }
@@ -96,7 +125,7 @@ pub struct PyRectangle;
 #[pymethods]
 impl PyRectangle {
     #[new]
-    #[pyo3(signature = (width=2.0, height=1.0, center=None, stroke_width=None, fill=None, color=None, corners=None))]
+    #[pyo3(signature = (width=2.0, height=1.0, center=None, stroke_width=None, fill=None, color=None, corners=None, position=None, rotation=None))]
     fn new(
         width: f32,
         height: f32,
@@ -105,6 +134,8 @@ impl PyRectangle {
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
         corners: Option<Vec<(f32, f32, f32)>>,
+        position: Option<(f32, f32, f32)>,
+        rotation: Option<(f32, f32, f32)>,
     ) -> PyResult<(Self, PyMobject)> {
         let corners = if let Some(corners) = corners {
             let corners: [(f32, f32, f32); 4] = corners.try_into().map_err(|_| {
@@ -130,7 +161,7 @@ impl PyRectangle {
             color: core_color(color),
             draw_config: build_draw_config(stroke_width, fill, color),
         };
-        Ok((Self, mobject("Rectangle", NodeVisual::Rectangle(rectangle))))
+        Ok((Self, apply_initial_transform(mobject("Rectangle", NodeVisual::Rectangle(rectangle)), position, rotation)))
     }
 }
 
@@ -140,19 +171,21 @@ pub struct PyPolyLine;
 #[pymethods]
 impl PyPolyLine {
     #[new]
-    #[pyo3(signature = (points, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (points, stroke_width=None, fill=None, color=None, position=None, rotation=None))]
     fn new(
         points: Vec<(f32, f32, f32)>,
         stroke_width: Option<f32>,
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
+        position: Option<(f32, f32, f32)>,
+        rotation: Option<(f32, f32, f32)>,
     ) -> (Self, PyMobject) {
         let mut polyline = PolyLine::new(points.into_iter().map(point).collect());
         polyline.draw_config = build_draw_config(stroke_width, fill, color);
         polyline.update_mesh();
         (
             Self,
-            mobject("PolyLine", NodeVisual::Renderable(Shared::new(polyline))),
+            apply_initial_transform(mobject("PolyLine", NodeVisual::Renderable(Shared::new(polyline))), position, rotation),
         )
     }
 }
@@ -163,7 +196,7 @@ pub struct PyArc;
 #[pymethods]
 impl PyArc {
     #[new]
-    #[pyo3(signature = (center=None, start_angle=0.0, end_angle=std::f32::consts::PI, radius=1.0, stroke_width=None, fill=None, color=None))]
+    #[pyo3(signature = (center=None, start_angle=0.0, end_angle=std::f32::consts::PI, radius=1.0, stroke_width=None, fill=None, color=None, position=None, rotation=None))]
     fn new(
         center: Option<(f32, f32, f32)>,
         start_angle: f32,
@@ -172,6 +205,8 @@ impl PyArc {
         stroke_width: Option<f32>,
         fill: Option<bool>,
         color: Option<(u8, u8, u8, u8)>,
+        position: Option<(f32, f32, f32)>,
+        rotation: Option<(f32, f32, f32)>,
     ) -> (Self, PyMobject) {
         let mut arc = Arc::new(
             point(center.unwrap_or((0.0, 0.0, 0.0))),
@@ -183,7 +218,7 @@ impl PyArc {
         arc.update_mesh();
         (
             Self,
-            mobject("Arc", NodeVisual::Renderable(Shared::new(arc))),
+            apply_initial_transform(mobject("Arc", NodeVisual::Renderable(Shared::new(arc))), position, rotation),
         )
     }
 }
@@ -275,17 +310,19 @@ pub struct PySphere3D;
 #[pymethods]
 impl PySphere3D {
     #[new]
-    #[pyo3(signature = (center=None, radius=1.0, color=None))]
+    #[pyo3(signature = (center=None, radius=1.0, color=None, unlit=false, flat_shading=false))]
     fn new(
         center: Option<(f32, f32, f32)>,
         radius: f32,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
         let mut object = mobject(
             "Sphere3D",
             NodeVisual::Renderable(Shared::new(Sphere3D {
                 radius,
-                material: material(color),
+                material: material(color, unlit, flat_shading),
             })),
         );
         object
@@ -303,18 +340,20 @@ pub struct PyLineSegment3D;
 #[pymethods]
 impl PyLineSegment3D {
     #[new]
-    #[pyo3(signature = (a=None, b=None, radius=0.05, color=None))]
+    #[pyo3(signature = (a=None, b=None, radius=0.05, color=None, unlit=false, flat_shading=false))]
     fn new(
         a: Option<(f32, f32, f32)>,
         b: Option<(f32, f32, f32)>,
         radius: f32,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
         let object = LineSegment3D {
             a: point(a.unwrap_or((-1.0, 0.0, 0.0))),
             b: point(b.unwrap_or((1.0, 0.0, 0.0))),
             radius,
-            material: material(color),
+            material: material(color, unlit, flat_shading),
         };
         (
             Self,
@@ -329,7 +368,7 @@ pub struct PyArrow3D;
 #[pymethods]
 impl PyArrow3D {
     #[new]
-    #[pyo3(signature = (start=None, end=None, shaft_radius=0.05, head_radius=0.1, head_length=0.3, color=None))]
+    #[pyo3(signature = (start=None, end=None, shaft_radius=0.05, head_radius=0.1, head_length=0.3, color=None, unlit=false, flat_shading=false))]
     fn new(
         start: Option<(f32, f32, f32)>,
         end: Option<(f32, f32, f32)>,
@@ -337,6 +376,8 @@ impl PyArrow3D {
         head_radius: f32,
         head_length: f32,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
         let object = Arrow3D {
             start: point(start.unwrap_or((-1.0, 0.0, 0.0))),
@@ -344,7 +385,7 @@ impl PyArrow3D {
             shaft_radius,
             head_radius,
             head_length,
-            material: material(color),
+            material: material(color, unlit, flat_shading),
         };
         (
             Self,
@@ -359,11 +400,13 @@ pub struct PyBox3DSdf;
 #[pymethods]
 impl PyBox3DSdf {
     #[new]
-    #[pyo3(signature = (center=None, size=None, color=None))]
+    #[pyo3(signature = (center=None, size=None, color=None, unlit=false, flat_shading=false))]
     fn new(
         center: Option<(f32, f32, f32)>,
         size: Option<(f32, f32, f32)>,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
         let size = size.unwrap_or((1.0, 1.0, 1.0));
         let mut object = mobject(
@@ -373,7 +416,7 @@ impl PyBox3DSdf {
                 x_axis: Vector3::x(),
                 y_axis: Vector3::y(),
                 z_axis: Vector3::z(),
-                material: material(color),
+                material: material(color, unlit, flat_shading),
             })),
         );
         object
@@ -391,19 +434,22 @@ pub struct PyBox3D;
 #[pymethods]
 impl PyBox3D {
     #[new]
-    #[pyo3(signature = (center=None, size=None, color=None))]
+    #[pyo3(signature = (center=None, size=None, color=None, unlit=false, flat_shading=false))]
     fn new(
         center: Option<(f32, f32, f32)>,
         size: Option<(f32, f32, f32)>,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
         let center = point(center.unwrap_or((0.0, 0.0, 0.0)));
         let size = size.unwrap_or((1.0, 1.0, 1.0));
-        let mesh = TriangleMesh3D::box_mesh(
+        let mut mesh = TriangleMesh3D::box_mesh(
             center,
             Vector3::new(size.0, size.1, size.2),
             core_color(color),
         );
+        apply_mesh_shading(&mut mesh, unlit, flat_shading);
         (
             Self,
             mobject("Box3D", NodeVisual::Renderable(Shared::new(mesh))),
@@ -417,7 +463,7 @@ pub struct PyTriangleMesh3D;
 #[pymethods]
 impl PyTriangleMesh3D {
     #[new]
-    #[pyo3(signature = (vertices, normals, colors, indices, color=(1.0, 1.0, 1.0, 1.0), model_matrix=None))]
+    #[pyo3(signature = (vertices, normals, colors, indices, color=(1.0, 1.0, 1.0, 1.0), model_matrix=None, unlit=false, flat_shading=false))]
     fn new(
         vertices: Vec<[f32; 3]>,
         normals: Vec<[f32; 3]>,
@@ -425,6 +471,8 @@ impl PyTriangleMesh3D {
         indices: Vec<u32>,
         color: (f32, f32, f32, f32),
         model_matrix: Option<[[f32; 4]; 4]>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
         let vertices = vertices
             .into_iter()
@@ -443,7 +491,8 @@ impl PyTriangleMesh3D {
                 }
             })
             .collect();
-        let mesh = TriangleMesh3D::new(vertices, indices);
+        let mut mesh = TriangleMesh3D::new(vertices, indices);
+        apply_mesh_shading(&mut mesh, unlit, flat_shading);
         let mut object = mobject("TriangleMesh3D", NodeVisual::Renderable(Shared::new(mesh)));
         if let Some(matrix) = model_matrix {
             object
@@ -460,21 +509,24 @@ pub struct PyCylinder3D;
 #[pymethods]
 impl PyCylinder3D {
     #[new]
-    #[pyo3(signature = (start=None, end=None, radius=1.0, segments=32, color=None))]
+    #[pyo3(signature = (start=None, end=None, radius=1.0, segments=32, color=None, unlit=false, flat_shading=false))]
     fn new(
         start: Option<(f32, f32, f32)>,
         end: Option<(f32, f32, f32)>,
         radius: f32,
         segments: u32,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
-        let mesh = TriangleMesh3D::cylinder(
+        let mut mesh = TriangleMesh3D::cylinder(
             point(start.unwrap_or((0.0, 0.0, 0.0))),
             point(end.unwrap_or((0.0, 1.0, 0.0))),
             radius,
             segments,
             core_color(color),
         );
+        apply_mesh_shading(&mut mesh, unlit, flat_shading);
         (
             Self,
             mobject("Cylinder3D", NodeVisual::Renderable(Shared::new(mesh))),
@@ -488,21 +540,24 @@ pub struct PyCone3D;
 #[pymethods]
 impl PyCone3D {
     #[new]
-    #[pyo3(signature = (base_center=None, tip=None, radius=1.0, segments=32, color=None))]
+    #[pyo3(signature = (base_center=None, tip=None, radius=1.0, segments=32, color=None, unlit=false, flat_shading=false))]
     fn new(
         base_center: Option<(f32, f32, f32)>,
         tip: Option<(f32, f32, f32)>,
         radius: f32,
         segments: u32,
         color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
     ) -> (Self, PyMobject) {
-        let mesh = TriangleMesh3D::cone(
+        let mut mesh = TriangleMesh3D::cone(
             point(base_center.unwrap_or((0.0, 0.0, 0.0))),
             point(tip.unwrap_or((0.0, 1.0, 0.0))),
             radius,
             segments,
             core_color(color),
         );
+        apply_mesh_shading(&mut mesh, unlit, flat_shading);
         (
             Self,
             mobject("Cone3D", NodeVisual::Renderable(Shared::new(mesh))),
@@ -705,5 +760,69 @@ impl PyMobject {
             handle.state.lock().unwrap().attachment = Some(Attachment { scene_token, id });
         }
         Ok(())
+    }
+}
+
+#[pyclass(name = "QuadraticBezier", extends=PyMobject, skip_from_py_object)]
+pub struct PyQuadraticBezier;
+
+#[pymethods]
+impl PyQuadraticBezier {
+    #[new]
+    #[pyo3(signature = (a=None, b=None, c=None, stroke_width=None, fill=None, color=None, position=None, rotation=None))]
+    fn new(
+        a: Option<(f32, f32)>,
+        b: Option<(f32, f32)>,
+        c: Option<(f32, f32)>,
+        stroke_width: Option<f32>,
+        fill: Option<bool>,
+        color: Option<(u8, u8, u8, u8)>,
+        position: Option<(f32, f32, f32)>,
+        rotation: Option<(f32, f32, f32)>,
+    ) -> (Self, PyMobject) {
+        let a = a.unwrap_or((-1.0, 0.0));
+        let b = b.unwrap_or((0.0, 1.0));
+        let c = c.unwrap_or((1.0, 0.0));
+        let mut qb = gmanim_core::mobjects::QuadraticBezier::new(
+            point((a.0, a.1, 0.0)),
+            point((b.0, b.1, 0.0)),
+            point((c.0, c.1, 0.0)),
+        );
+        qb.draw_config = build_draw_config(stroke_width, fill, color);
+        qb.update_mesh();
+        (
+            Self,
+            apply_initial_transform(mobject("QuadraticBezier", NodeVisual::Renderable(Shared::new(qb))), position, rotation),
+        )
+    }
+}
+
+#[pyclass(name = "QuadraticBezier3D", extends=PyMobject, skip_from_py_object)]
+pub struct PyQuadraticBezier3D;
+
+#[pymethods]
+impl PyQuadraticBezier3D {
+    #[new]
+    #[pyo3(signature = (a=(0.0, 0.0, 0.0), b=(0.0, 0.0, 0.0), c=(0.0, 0.0, 0.0), radius=0.05, color=None, unlit=false, flat_shading=false))]
+    fn new(
+        a: (f32, f32, f32),
+        b: (f32, f32, f32),
+        c: (f32, f32, f32),
+        radius: f32,
+        color: Option<(u8, u8, u8, u8)>,
+        unlit: bool,
+        flat_shading: bool,
+    ) -> (Self, PyMobject) {
+        let qb = gmanim_core::mobjects::object_3d::QuadraticBezier3D {
+            a: point(a),
+            b: point(b),
+            c: point(c),
+            radius,
+            material: material(color, unlit, flat_shading),
+        };
+        (
+            Self,
+            mobject("QuadraticBezier3D", NodeVisual::Renderable(Shared::new(qb))),
+        )
     }
 }

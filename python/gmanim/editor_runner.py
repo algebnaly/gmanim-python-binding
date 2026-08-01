@@ -21,13 +21,13 @@ if __name__ == "__main__":
     rendered_scenes = {}
 
     # In editor mode render publishes the completed scene instead of encoding video.
-    def publish_scene(scene, *args, **kwargs):
+    def publish_scene(scene: gmanim.Scene, *args: object, **kwargs: object) -> None:
         existing = rendered_scenes.get(scene.name)
         if existing is not None and existing is not scene:
             raise ValueError(f"duplicate rendered scene name: {scene.name!r}")
         rendered_scenes[scene.name] = scene
 
-    gmanim.Scene.render = publish_scene
+    setattr(gmanim.Scene, "render", publish_scene)
 
     # Execute the user's normal entry point so Scene construction stays authoritative.
     runpy.run_path(args.script, run_name="__main__")

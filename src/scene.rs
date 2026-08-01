@@ -427,6 +427,12 @@ impl PyScene {
             .map_err(value_error)
     }
 
+    fn set_background_color(&mut self, r: u8, g: u8, b: u8, a: u8) -> PyResult<()> {
+        self.builder_mut()?
+            .set_background_color(gmanim_core::Color::new(r, g, b, a));
+        Ok(())
+    }
+
     fn set_layer(&mut self, object: &PyMobject, layer: i32) -> PyResult<()> {
         let id = self.object_id(object)?;
         self.builder_mut()?

@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use animations::{PyAnimation, PyMove, PyRotate, PyUpdateFromFunc, PyWait};
 use mobjects::{
     PyArc, PyArrow3D, PyBox3D, PyBox3DSdf, PyDot, PyLine, PyLineSegment3D, PyMesh2DIn3D,
-    PyPolyLine, PyRectangle, PySphere3D, PyText,
+    PyPolyLine, PyQuadraticBezier, PyQuadraticBezier3D, PyRectangle, PySphere3D, PyText,
 };
 use scene::{PyMobject, PyPreviewSession, PyScene, PySceneFrame};
 
@@ -89,10 +89,12 @@ pub fn gmanim(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRectangle>()?;
     m.add_class::<PyPolyLine>()?;
     m.add_class::<PyArc>()?;
+    m.add_class::<PyQuadraticBezier>()?;
     m.add_class::<PyDot>()?;
     m.add_class::<PyText>()?;
     m.add_class::<PySphere3D>()?;
     m.add_class::<PyLineSegment3D>()?;
+    m.add_class::<PyQuadraticBezier3D>()?;
     m.add_class::<PyArrow3D>()?;
     m.add_class::<PyBox3D>()?;
     m.add_class::<PyBox3DSdf>()?;

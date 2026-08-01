@@ -2,8 +2,10 @@ from collections.abc import Callable, Sequence
 from enum import Enum
 from typing import Optional, TypeVar, Union
 
-Point3 = tuple[float, float, float]
-Color = tuple[int, int, int, int]
+# Stub-only aliases; runtime Point2/Point3/Color live in gmanim.types.
+_Point2 = tuple[float, float]
+_Point3 = tuple[float, float, float]
+_Color = tuple[int, int, int, int]
 
 _TMesh = TypeVar("_TMesh", bound="Mesh2DIn3D")
 
@@ -30,8 +32,8 @@ class VulkanH264Config:
 
 class Mobject:
     name: str
-    def set_position(self, position: Point3) -> None: ...
-    def get_position(self) -> Point3: ...
+    def set_position(self, position: _Point3) -> None: ...
+    def get_position(self) -> _Point3: ...
     def rotate_x(self, angle: float) -> None: ...
     def rotate_y(self, angle: float) -> None: ...
     def rotate_z(self, angle: float) -> None: ...
@@ -52,16 +54,17 @@ class Scene:
     fps: int
     def add(self, obj: Mobject) -> Mobject: ...
     def remove(self, arg: Union[int, Mobject]) -> None: ...
-    def set_position(self, obj: Mobject, position: Point3) -> None: ...
-    def get_position(self, obj: Mobject) -> Point3: ...
+    def set_position(self, obj: Mobject, position: _Point3) -> None: ...
+    def get_position(self, obj: Mobject) -> _Point3: ...
     def set_visible(self, obj: Mobject, visible: bool) -> None: ...
+    def set_background_color(self, r: int, g: int, b: int, a: int) -> None: ...
     def set_layer(self, obj: Mobject, layer: int) -> None: ...
     def set_camera(
         self,
-        position: Optional[Point3] = None,
-        target: Optional[Point3] = None,
-        direction: Optional[Point3] = None,
-        up: Optional[Point3] = None,
+        position: Optional[_Point3] = None,
+        target: Optional[_Point3] = None,
+        direction: Optional[_Point3] = None,
+        up: Optional[_Point3] = None,
     ) -> None: ...
     def set_orthographic_camera(
         self,
@@ -86,11 +89,11 @@ class Scene:
     def clear_viewport(self) -> None: ...
     def set_anti_aliasing(self, level: int) -> None: ...
     def set_point_light(
-        self, position: Point3, color_value: Color, intensity: float
+        self, position: _Point3, color_value: _Color, intensity: float
     ) -> None: ...
     def set_environment_light(
         self,
-        color_value: Color,
+        color_value: _Color,
         intensity: float,
         rotation_radians: float = 0.0,
     ) -> None: ...
@@ -115,15 +118,15 @@ class PreviewSession:
 class SceneFrame:
     frame: int
     alpha: float
-    def get_position(self, obj: Mobject) -> Point3: ...
-    def set_position(self, obj: Mobject, position: Point3) -> None: ...
-    def move_by(self, obj: Mobject, displacement: Point3) -> None: ...
+    def get_position(self, obj: Mobject) -> _Point3: ...
+    def set_position(self, obj: Mobject, position: _Point3) -> None: ...
+    def move_by(self, obj: Mobject, displacement: _Point3) -> None: ...
     def set_visible(self, obj: Mobject, visible: bool) -> None: ...
     def set_layer(self, obj: Mobject, layer: int) -> None: ...
     def set_rectangle_corners(
-        self, obj: Mobject, corners: Sequence[Point3]
+        self, obj: Mobject, corners: Sequence[_Point3]
     ) -> None: ...
-    def set_camera(self, position: Point3, target: Point3, up: Point3) -> None: ...
+    def set_camera(self, position: _Point3, target: _Point3, up: _Point3) -> None: ...
     def set_orthographic_camera(
         self,
         height: float = 9.0,
@@ -147,11 +150,11 @@ class SceneFrame:
     def clear_viewport(self) -> None: ...
     def set_anti_aliasing(self, level: int) -> None: ...
     def set_point_light(
-        self, position: Point3, color_value: Color, intensity: float
+        self, position: _Point3, color_value: _Color, intensity: float
     ) -> None: ...
     def set_environment_light(
         self,
-        color_value: Color,
+        color_value: _Color,
         intensity: float,
         rotation_radians: float = 0.0,
     ) -> None: ...
@@ -159,11 +162,13 @@ class SceneFrame:
 class Line(Mobject):
     def __init__(
         self,
-        p0: Optional[Point3] = None,
-        p1: Optional[Point3] = None,
+        p0: Optional[_Point3] = None,
+        p1: Optional[_Point3] = None,
         stroke_width: Optional[float] = None,
         fill: Optional[bool] = None,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        position: Optional[_Point3] = None,
+        rotation: Optional[_Point3] = None,
     ) -> None: ...
 
 class Rectangle(Mobject):
@@ -171,108 +176,151 @@ class Rectangle(Mobject):
         self,
         width: float = 2.0,
         height: float = 1.0,
-        center: Optional[Point3] = None,
+        center: Optional[_Point3] = None,
         stroke_width: Optional[float] = None,
         fill: Optional[bool] = None,
-        color: Optional[Color] = None,
-        corners: Optional[Sequence[Point3]] = None,
+        color: Optional[_Color] = None,
+        corners: Optional[Sequence[_Point3]] = None,
+        position: Optional[_Point3] = None,
+        rotation: Optional[_Point3] = None,
     ) -> None: ...
 
 class PolyLine(Mobject):
     def __init__(
         self,
-        points: Sequence[Point3],
+        points: Sequence[_Point3],
         stroke_width: Optional[float] = None,
         fill: Optional[bool] = None,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        position: Optional[_Point3] = None,
+        rotation: Optional[_Point3] = None,
     ) -> None: ...
 
 class Arc(Mobject):
     def __init__(
         self,
-        center: Optional[Point3] = None,
+        center: Optional[_Point3] = None,
         start_angle: float = 0.0,
         end_angle: float = 3.1415927,
         radius: float = 1.0,
         stroke_width: Optional[float] = None,
         fill: Optional[bool] = None,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        position: Optional[_Point3] = None,
+        rotation: Optional[_Point3] = None,
+    ) -> None: ...
+
+class QuadraticBezier(Mobject):
+    def __init__(
+        self,
+        a: Optional[_Point2] = None,
+        b: Optional[_Point2] = None,
+        c: Optional[_Point2] = None,
+        stroke_width: Optional[float] = None,
+        fill: Optional[bool] = None,
+        color: Optional[_Color] = None,
+        position: Optional[_Point3] = None,
+        rotation: Optional[_Point3] = None,
     ) -> None: ...
 
 class Dot(Mobject):
     def __init__(
         self,
-        position: Point3 = (0.0, 0.0, 0.0),
+        position: _Point3 = (0.0, 0.0, 0.0),
         radius: float = 0.05,
         stroke_width: Optional[float] = None,
         fill: Optional[bool] = None,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
     ) -> None: ...
 
 class Text(Mobject):
     def __init__(
         self,
         text: str,
-        position: Point3 = (0.0, 0.0, 0.0),
+        position: _Point3 = (0.0, 0.0, 0.0),
         font_size: float = 32.0,
         stroke_width: Optional[float] = None,
         fill: Optional[bool] = None,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
     ) -> None: ...
 
 class Sphere3D(Mobject):
     def __init__(
         self,
-        center: Optional[Point3] = None,
+        center: Optional[_Point3] = None,
         radius: float = 1.0,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class LineSegment3D(Mobject):
     def __init__(
         self,
-        a: Optional[Point3] = None,
-        b: Optional[Point3] = None,
+        a: Optional[_Point3] = None,
+        b: Optional[_Point3] = None,
         radius: float = 0.05,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
+    ) -> None: ...
+
+class QuadraticBezier3D(Mobject):
+    def __init__(
+        self,
+        a: _Point3 = (0.0, 0.0, 0.0),
+        b: _Point3 = (0.0, 0.0, 0.0),
+        c: _Point3 = (0.0, 0.0, 0.0),
+        radius: float = 0.05,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class Arrow3D(Mobject):
     def __init__(
         self,
-        start: Optional[Point3] = None,
-        end: Optional[Point3] = None,
+        start: Optional[_Point3] = None,
+        end: Optional[_Point3] = None,
         shaft_radius: float = 0.05,
         head_radius: float = 0.1,
         head_length: float = 0.3,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class Box3DSdf(Mobject):
     def __init__(
         self,
-        center: Optional[Point3] = None,
-        size: Optional[Point3] = None,
-        color: Optional[Color] = None,
+        center: Optional[_Point3] = None,
+        size: Optional[_Point3] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class Box3D(Mobject):
     def __init__(
         self,
-        center: Optional[Point3] = None,
-        size: Optional[Point3] = None,
-        color: Optional[Color] = None,
+        center: Optional[_Point3] = None,
+        size: Optional[_Point3] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class TriangleMesh3D(Mobject):
     def __init__(
         self,
-        vertices: Sequence[Point3],
-        normals: Sequence[Point3],
+        vertices: Sequence[_Point3],
+        normals: Sequence[_Point3],
         colors: Sequence[tuple[float, float, float, float]],
         indices: Sequence[int],
         color: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
         model_matrix: Optional[Sequence[Sequence[float]]] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class Mesh2DIn3D(Mobject):
@@ -281,21 +329,25 @@ class Mesh2DIn3D(Mobject):
 class Cylinder3D(Mobject):
     def __init__(
         self,
-        start: Optional[Point3] = None,
-        end: Optional[Point3] = None,
+        start: Optional[_Point3] = None,
+        end: Optional[_Point3] = None,
         radius: float = 1.0,
         segments: int = 32,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class Cone3D(Mobject):
     def __init__(
         self,
-        base_center: Optional[Point3] = None,
-        tip: Optional[Point3] = None,
+        base_center: Optional[_Point3] = None,
+        tip: Optional[_Point3] = None,
         radius: float = 1.0,
         segments: int = 32,
-        color: Optional[Color] = None,
+        color: Optional[_Color] = None,
+        unlit: bool = False,
+        flat_shading: bool = False,
     ) -> None: ...
 
 class Group(Mobject):
@@ -305,15 +357,15 @@ class Animation: ...
 
 class Move(Animation):
     def __init__(
-        self, target: Mobject, displacement: Point3, frames: int = 60
+        self, target: Mobject, displacement: _Point3, frames: int = 60
     ) -> None: ...
 
 class Rotate(Animation):
     def __init__(
         self,
         target: Mobject,
-        axis: Point3,
-        center: Point3,
+        axis: _Point3,
+        center: _Point3,
         frames: int = 60,
     ) -> None: ...
 
@@ -326,33 +378,35 @@ class UpdateFromFunc(Animation):
     ) -> None: ...
 
 __all__ = [
-    "Animation",
+    "Scene",
+    "PreviewSession",
+    "SceneFrame",
+    "Mobject",
+    "Line",
+    "Rectangle",
+    "PolyLine",
     "Arc",
+    "QuadraticBezier",
+    "Dot",
+    "Text",
+    "Sphere3D",
+    "LineSegment3D",
+    "QuadraticBezier3D",
     "Arrow3D",
     "Box3D",
     "Box3DSdf",
-    "Cone3D",
-    "Cylinder3D",
-    "Dot",
-    "Group",
-    "H264RateControl",
-    "Line",
-    "LineSegment3D",
     "Mesh2DIn3D",
-    "Mobject",
-    "Move",
-    "PolyLine",
-    "PyVideoBackend",
-    "Rectangle",
-    "Rotate",
-    "Scene",
-    "SceneFrame",
-    "Sphere3D",
-    "Text",
     "TriangleMesh3D",
-    "UpdateFromFunc",
-    "VulkanH264Config",
+    "Cylinder3D",
+    "Cone3D",
+    "Group",
+    "Animation",
+    "Move",
+    "Rotate",
     "Wait",
-    "scene",
+    "UpdateFromFunc",
+    "PyVideoBackend",
+    "H264RateControl",
+    "VulkanH264Config",
 ]
 __doc__: Optional[str]
