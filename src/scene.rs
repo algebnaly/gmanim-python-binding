@@ -171,6 +171,7 @@ impl PyPreviewSession {
                 msaa_samples: 8,
                 ssaa_factor: 1,
                 output_color_profile: Default::default(),
+                analytic_aa_2d: true,
             },
         );
         Ok(Self {
@@ -912,6 +913,7 @@ fn render_timeline(timeline: &mut CompiledTimeline, options: RenderOptions) -> R
             msaa_samples: options.msaa_samples,
             ssaa_factor: options.ssaa_factor,
             output_color_profile: Default::default(),
+            analytic_aa_2d: true,
         },
     );
     let mut backend = match options.backend {
